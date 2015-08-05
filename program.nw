@@ -2922,11 +2922,10 @@ src/err-msg.h: program.nw
 
 # ==== documentation =================================================
 
-doc/r3shuffle.pdf: tmp/r3shuffle.tex
+doc/r3shuffle.pdf: doc/r3shuffle.tex
 	pdflatex -output-directory doc $<
-	mv doc/r3shuffle.aux doc/r3shuffle.log tmp/
 
-tmp/r3shuffle.tex: program.nw
+doc/r3shuffle.tex: program.nw
 	noweave -delay -t4 $< > $@
 
 # ==== makefile ======================================================
