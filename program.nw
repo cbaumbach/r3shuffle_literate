@@ -1,0 +1,2936 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage{times}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{noweb}
+\pagestyle{noweb}
+
+%% To find out about undocumented noweb options look for TeX macros
+%% beginning with "\nwopt@" in noweb.sty.
+\noweboptions{smallcode,breakcode}
+
+%% Increase vertical space around code chunks.
+%% \nwcodetopsep=8pt plus 3pt minus 2pt
+
+%% ===================================================================
+%% Macros
+%% ===================================================================
+\def\Cpp{\hbox{C$^{++}$}}
+
+%% ===================================================================
+\begin{document}
+
+\centerline{\huge\bfseries r3shuffle}
+\bigskip
+
+\noindent R3shuffle is a reimplementation in C of the \Cpp\ program
+``reshuffle''.
+%%
+Reshuffle is part of the OmicABEL package and is used to convert
+OmicABEL's binary output files with regression results into
+human-readable, plain text files.
+%%
+The output of OmicABEL consists of two binary files having extensions
+``.iout'' and ``.out''.
+%%
+The ``.iout'' file contains information about the layout of the data
+contained in the ``.out'' file.
+%%
+Therefore, we will refer to them as the layout and the data file.
+
+%% ===================================================================
+\section{Top-level structure}
+%% ===================================================================
+
+R3shuffle's user interface is described in its help message.
+
+<<usage message>>=
+"NAME\n"
+"       r3shuffle - convert OmicABEL's binary output to plain text\n"
+"\n"
+"SYNOPSIS\n"
+"       r3shuffle [OPTION]... FILE\n"
+"\n"
+"DESCRIPTION\n"
+"       Convert OmicABEL's binary output files FILE.iout and\n"
+"       FILE.out into a single plain text file.\n"
+"\n"
+"       Mandatory arguments to long options are mandatory for short\n"
+"       options too.\n"
+"\n"
+"       -c, --column=LABEL\n"
+"              include column LABEL in output\n"
+"\n"
+"       -d, --digits=K\n"
+"              use K significant digits in output (default: 8)\n"
+"\n"
+"       -h, --help\n"
+"              display this help message\n"
+"\n"
+"       -o, --output=OUTFILE\n"
+"              name of output file (default: stdout)\n"
+"\n"
+"       --print-columns\n"
+"              write available output variables to --output\n"
+@
+
+
+%% ===================================================================
+\section{Dealing with errors}
+%% ===================================================================
+
+We adopt the rule that functions do not exit if an error occurs.
+%%
+Instead they set a global error message and return 0 as error code.
+%%
+This makes it easy to test a function's error handling behavior.
+%%
+We only need to test the function's exit code and the value of the
+global error message.
+
+<<src/err-msg.h>>=
+#ifndef ERR_MSG_H
+#define ERR_MSG_H
+#include <stdio.h>
+
+#define SET_ERR_MSG(...) snprintf(err_msg, ERR_MSG_MAXLEN, __VA_ARGS__)
+
+enum { ERR_MSG_MAXLEN = 200 };
+extern char err_msg[];
+
+#endif  /* ERR_MSG_H */
+@
+
+<<src/err-msg.c>>=
+#include "err-msg.h"
+
+char err_msg[ERR_MSG_MAXLEN];
+@
+
+%% ===================================================================
+\section{Parse command-line arguments}
+%% ===================================================================
+
+<<src/parse-command-line-args.h>>=
+#ifndef PARSE_COMMAND_LINE_ARGS_H
+#define PARSE_COMMAND_LINE_ARGS_H
+
+struct Params {
+    int ncolumn;         /* number of selected columns */
+    char **columns;      /* labels of selected columns */
+    int *ucp2acp; /* user column position -> actual column position */
+    int ndigit;          /* number of sig. digits in output */
+    int help;            /* Display help message? */
+    int print_columns;   /* Print available columns? */
+    char *output_file;   /* path to output file */
+    char *layout_file;   /* path to layout file */
+    char *data_file;     /* path to data file */
+    <<double print format for output>>
+};
+
+void initialize_parameters(struct Params *params);
+int parse_command_line_args(int argc, char *argv[], struct Params *params);
+int validate_command_line_args(struct Params *params);
+#endif  /* PARSE_COMMAND_LINE_ARGS_H */
+@
+
+<<src/parse-command-line-args.c>>=
+<<src/parse-command-line-args.c defines>>
+<<src/parse-command-line-args.c includes>>
+<<src/parse-command-line-args.c functions>>
+@
+
+<<src/parse-command-line-args.c functions>>=
+void initialize_parameters(struct Params *params)
+{
+    int i;
+
+    params->ncolumn = 0;
+    params->columns = NULL;
+    params->ucp2acp = NULL;
+    params->ndigit  = 8;
+    params->help    = 0;
+    params->print_columns = 0;
+    params->output_file = NULL;
+    params->layout_file = NULL;
+    params->data_file   = NULL;
+    for (i = 0; (unsigned)i < NELEMS(params->fmt); i++)
+        params->fmt[i] = '\0';
+}
+@
+
+<<src/parse-command-line-args.c defines>>=
+#define NELEMS(x) ((sizeof (x)) / (sizeof (x[0])))
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <stdlib.h>
+@
+
+<<src/parse-command-line-args.c functions>>=
+int parse_command_line_args(int argc, char *argv[], struct Params *params)
+{
+    int c, *p, i;
+    long v;
+    char *s, **t;
+    size_t n;
+
+    while (1) {
+
+        static struct option long_options[] = {
+            {"column",        required_argument, 0, 'c'},
+            {"digits",        required_argument, 0, 'd'},
+            {"help",          no_argument,       0, 'h'},
+            {"output",        required_argument, 0, 'o'},
+            {"print-columns", no_argument,       0, 'p'},
+            {0, 0, 0, 0}
+        };
+
+        c = getopt_long(argc, argv, ":c:d:ho:", long_options, NULL);
+        if (c == -1)
+            break;
+
+        switch (c) {
+        case 'c':
+            <<remember selected column>>
+            break;
+        case 'd':
+            <<parse number of significant digits>>
+            break;
+        case 'h':
+            params->help = 1;
+            break;
+        case 'o':
+            params->output_file = optarg;
+            break;
+        case 'p':
+            params->print_columns = 1;
+            break;
+        case ':':
+            SET_ERR_MSG("missing argument: %s", argv[optind - 1]);
+            return 0;
+        default:
+            SET_ERR_MSG("unknown option: %s", argv[optind - 1]);
+            return 0;
+        }
+    }
+    <<allocate space for column order>>
+    <<get path to layout and data files>>
+
+    return 1;
+}
+@
+
+<<src/parse-command-line-args.c defines>>=
+#define _GNU_SOURCE
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include "parse-command-line-args.h"
+#include "err-msg.h"
+#include <stdlib.h>
+#include <getopt.h>
+#include <stdio.h>
+@
+
+Every time we find a new column we extend our storage of pointers to
+[[char]] by one and store the label of the given column in the freshly
+allocated cell.
+
+<<remember selected column>>=
+n = (params->ncolumn + 1) * sizeof(char *);
+if ((t = (char **)realloc(params->columns, n)) != NULL) {
+    params->columns = t;
+    params->columns[params->ncolumn++] = optarg;
+}
+else {
+    SET_ERR_MSG("can't realloc %lu bytes for user-supplied column "
+        "labels", (unsigned long)n);
+    return 0;
+}
+@
+
+<<src/parse-coc includes>>=
+#include <stdlib.h>
+@
+
+The user-supplied column labels determine the order in which columns
+will be written to the output file.
+%%
+Once we know the actual column labels as defined in the layout file,
+we have to associate every user-supplied column label with its index
+in the list of labels in the layout file.
+%%
+Here we only allocate a buffer to hold the column indexes that we will
+compute later.
+%%
+We allocate space for an additional integer that will be initialized
+to $-9$ and will be used for testing.
+
+<<allocate space for column order>>=
+n = (params->ncolumn + 1) * sizeof(int);
+if ((p = (int *)malloc(n)) == NULL) {
+    SET_ERR_MSG("unable to allocate %lu bytes", (unsigned long)n);
+    return 0;
+}
+for (i = 0; i < params->ncolumn; i++)
+    p[i] = -1;
+p[params->ncolumn] = -9;
+params->ucp2acp = p;
+@
+
+If the call to [[strtol]] would result in underflow or overflow,
+[[errno]] is set to [[ERANGE]].
+%%
+It can also happen that [[strtol]] doesn't find a single valid
+character in its first argument.
+%%
+In that case [[strtol]] will return 0 and \emph{maybe} set [[errno]].
+%%
+We can detect this situation for certain by checking whether, after
+the call to [[strtol]], the pointer passed as the second argument
+points to the same address as the pointer passed as the first
+argument.
+
+<<parse number of significant digits>>=
+errno = 0;
+v = strtol(optarg, &s, 10);
+if (errno || s == optarg) {
+    SET_ERR_MSG("unable to convert --digits to integer: %s", optarg);
+    return 0;
+}
+params->ndigit = v;
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <errno.h>
+#include <stdio.h>
+@
+
+<<get path to layout and data files>>=
+if (optind < argc) {
+    char *s;
+    size_t len = strlen(argv[optind]);
+    size_t nchar;
+    const char data_extension[] = ".out";
+    const char layout_extension[] = ".iout";
+
+    nchar = len + sizeof data_extension;  /* includes NUL byte */
+    assert((s = (char *)malloc(nchar)) != NULL);
+    assert(nchar - 1 == (size_t)sprintf(s, "%s%s", argv[optind], data_extension));
+    params->data_file = s;
+
+    nchar = len + sizeof layout_extension;
+    assert((s = (char *)malloc(nchar + 1)) != NULL);
+    assert(nchar - 1 == (size_t)sprintf(s, "%s%s", argv[optind], layout_extension));
+    params->layout_file = s;
+}
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <stdio.h>
+@
+
+We use a separate function to check whether the parsed command-line
+arguments are complete and consistent.
+
+<<src/parse-command-line-args.c functions>>=
+int validate_command_line_args(struct Params *params)
+{
+    FILE *fp;
+    const char *file;
+    int output_file_exists;
+
+    <<make sure [[ndigit]] is between 0 and 99>>
+    <<setup double format for output>>
+
+    if (<<output file was specified>>) {
+        <<check if output filename is empty>>
+        <<check if output file exists already>>
+        <<check if output file is writable>>
+    }
+    <<check if layout and data file were supplied>>
+    file = params->layout_file;
+    <<check that [[file]] is readable>>
+    file = params->data_file;
+    <<check that [[file]] is readable>>
+
+    return 1;
+}
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <stdio.h>
+@
+
+We will require the number of significant digits to be a non-negative
+integer smaller than or equal to 99.
+%%
+This way we know that the width in the format will never occupy more
+than 2~characters.
+
+<<double print format for output>>=
+char fmt[10];
+@
+
+<<make sure [[ndigit]] is between 0 and 99>>=
+if (params->ndigit > 99) {
+    SET_ERR_MSG("argument to --digits must be <100");
+    return 0;
+}
+if (params->ndigit < 0) {
+    SET_ERR_MSG("argument to --digits must be >=0");
+    return 0;
+}
+@
+
+<<setup double format for output>>=
+sprintf(params->fmt, "%%.%df", params->ndigit);
+@
+
+<<output file was specified>>=
+(file = params->output_file) != NULL
+@
+
+<<check if output filename is empty>>=
+if (file[0] == '\0') {
+    SET_ERR_MSG("output filename must not be empty");
+    return 0;
+}
+@
+
+If we are able to retrieve information about the output file via
+[[stat]], we can be sure that it exists.
+%%
+In case [[stat]] fails to retrieve information about the file, we
+distinguish two cases.
+%%
+If [[stat]] sets [[errno]] to [[ENOENT]], the man page [[stat]] says
+that ``A component of path does not exist, or path is an empty
+string.''
+%%
+Since we have already checked for an empty path, we know that some
+component of the path does not exist.
+%%
+But this means that the output file doesn't exist.
+%%
+If we find [[errno]] to have a value other than [[ENOENT]], we will
+return an error and leave further investigation of the problem to the
+user.
+
+<<check if output file exists already>>=
+{
+    struct stat buf;
+    int status;
+
+    errno = 0;
+    status = stat(file, &buf);
+
+    if (status == 0)
+        output_file_exists = 1;
+    else {
+        switch(errno) {
+        case ENOENT:
+            output_file_exists = 0;
+            break;
+        case ELOOP:
+            SET_ERR_MSG("too many symbolic links while traversing "
+                "path: %s", file);
+            return 0;
+        case ENAMETOOLONG:
+            SET_ERR_MSG("file name too long: %s", file);
+            return 0;
+        case ENOMEM:
+            SET_ERR_MSG("out of memory while trying to stat(2): %s",
+                file);
+            return 0;
+        case ENOTDIR:
+            SET_ERR_MSG("some component of path prefix is not a "
+                "directory: %s", file);
+            return 0;
+        case EOVERFLOW:
+            SET_ERR_MSG("overflow while trying to stat(2): %s", file);
+            return 0;
+        default:
+            SET_ERR_MSG("unable to stat(2) output file: %s", file);
+            return 0;
+        }
+    }
+}
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <errno.h>
+@
+
+Opening a file in write mode has the inconvenient side effect of
+truncating the file to zero length.
+%%
+However, we don't want to clobber an existing file prematurely.
+%%
+Maybe something causes the program to abort before we even start
+writing to the output file.
+%%
+In such a case, we would be left with nothing, neither the old nor the
+new output file.
+%%
+To avoid this scenario we will try to open the output file in append
+mode.
+%%
+This creates the file if it doesn't already exist but it doesn't
+truncate an existing file.
+%%
+If we created the file during the append, we remove the file once the
+append succeeded.
+
+<<check if output file is writable>>=
+if ((fp = fopen(file, "ab")) == NULL) {
+    SET_ERR_MSG("can't write to output file: %s", file);
+    return 0;
+}
+if (fclose(fp)) {
+    SET_ERR_MSG("unable to fclose output file: %s", file);
+    return 0;
+}
+if (!output_file_exists && unlink(file) != 0) {
+    SET_ERR_MSG("unable to remove temporary output file: %s", file);
+    return 0;
+}
+@
+
+<<src/parse-command-line-args.c includes>>=
+#include <unistd.h>
+@
+
+<<check if layout and data file were supplied>>=
+if (params->layout_file == NULL || params->data_file == NULL) {
+    SET_ERR_MSG("missing command-line argument: FILE");
+    return 0;
+}
+@
+
+For a file to be readable we must be able to open a read-only stream
+to it.
+
+<<check that [[file]] is readable>>=
+if ((fp = fopen(file, "rb")) == NULL) {
+    SET_ERR_MSG("unable to open file for reading: %s", file);
+    return 0;
+}
+if (fclose(fp)) {
+    SET_ERR_MSG("unable to close file: %s\n", file);
+    return 0;
+}
+@
+
+%% ===================================================================
+\section{Parsing the layout file}
+%% ===================================================================
+
+<<src/parse-layout-file.h>>=
+#ifndef PARSE_LAYOUT_FILE_H
+#define PARSE_LAYOUT_FILE_H
+
+struct Layout {
+    int magic_number;      /* magic number */
+    int bytes_per_double;  /* number of bytes in a double */
+    int nvar;              /* number of covariates (including intercept and snp) */
+    int nsnp;              /* number of snps */
+    int ntrait;            /* number of traits */
+    int snps_per_tile;     /* number of snps per tile (see below) */
+    int traits_per_tile;   /* number of traits per tile (see below) */
+    int max_char;          /* number of characters per label */
+    int ncov;              /* number of covariances */
+    char **beta_labels;    /* labels for beta columns */
+    char **se_labels;      /* labels for standard error columns */
+    char **cov_labels;     /* labels for covariance columns */
+    char **snp_labels;     /* snp labels */
+    char **trait_labels;   /* trait labels */
+};
+
+int parse_layout_file(const char *file, struct Layout *layout);
+int validate_layout(struct Layout *layout);
+int write_layout_file(const char *file, struct Layout *layout);
+int set_column_print_order(char **columns, int ncolumn, int *ucp2acp,
+    struct Layout *layout);
+
+#endif  /* PARSE_LAYOUT_FILE_H */
+@
+
+<<src/parse-layout-file.c>>=
+<<src/parse-layout-file.c defines>>
+<<src/parse-layout-file.c includes>>
+<<src/parse-layout-file.c functions>>
+@
+
+<<src/parse-layout-file.c includes>>=
+#include "parse-layout-file.h"
+@
+
+<<src/parse-layout-file.c functions>>=
+int parse_layout_file(const char *file, struct Layout *layout)
+{
+    int a[8], i;
+    FILE *fp;
+    size_t n;
+    char *buf, *s, **t;
+
+    if ((fp = fopen(file, "rb")) == NULL) {
+        SET_ERR_MSG("unable to open layout file for reading: %s", file);
+        return 0;
+    }
+
+    assert(fread(a, sizeof(int), NELEMS(a), fp) == NELEMS(a));
+    if (feof(fp)) {
+        SET_ERR_MSG("unexpectedly reached end of layout file: %s", file);
+        return 0;
+    }
+    if (ferror(fp)) {
+        SET_ERR_MSG("error while reading layout file: %s", file);
+        return 0;
+    }
+
+    layout->magic_number     = a[0];
+    layout->bytes_per_double = a[1];
+    layout->nvar             = a[2];
+    layout->nsnp             = a[3];
+    layout->ntrait           = a[4];
+    layout->snps_per_tile    = a[5];
+    layout->traits_per_tile  = a[6];
+    layout->max_char         = a[7];
+
+    <<compute number of covariances>>
+    <<read labels from layout file>>
+    <<allocate space for pointers to labels>>
+    <<store labels in pointer buckets>>
+
+    if (fclose(fp)) {
+        SET_ERR_MSG("unable to close layout file after reading: %s", file);
+        return 0;
+    }
+
+    return 1;
+}
+@
+
+<<src/parse-layout-file.c defines>>=
+#define NELEMS(x) ((sizeof (x)) / (sizeof (x[0])))
+@
+
+<<src/parse-layout-file.c includes>>=
+#include <stdio.h>
+#include <stddef.h>
+#include <assert.h>
+#include "err-msg.h"
+@
+
+The number of covariances between the covariates corresponds to the
+number of elements in the lower covariance matrix.
+%%
+Since we have $n=\text{[[nvar]]}$ covariates the lower covariance
+matrix contains $1+2+\cdots+(n-1)=(1/2)(n-1)n$ covariances.
+
+<<compute number of covariances>>=
+layout->ncov = ((layout->nvar - 1) * layout->nvar) / 2;
+@
+
+We have [[nvar]] beta labels, [[nvar]] standard error labels, [[ncov]]
+covariances, [[nsnp]] snp labels, and [[ntrait]] trait labels.
+%%
+Each label occupies [[max_char]] bytes.
+
+<<read labels from layout file>>=
+n = layout->nvar + layout->nvar + layout->ncov + layout->nsnp + layout->ntrait;
+n *= layout->max_char;
+if ((buf = (char *)malloc(n)) == NULL) {
+    SET_ERR_MSG("unable to allocate %lu bytes", (unsigned long)n);
+    return 0;
+}
+assert(fread(buf, n, 1, fp) == 1);
+@
+
+<<src/parse-layout-file.c includes>>=
+#include <stdlib.h>
+#include <assert.h>
+@
+
+Since all labels are contained in [[buf]], the label members of the
+layout struct will be nothing but pointers into [[buf]].
+%%
+Before we can set those pointers we have to allocate space for them.
+
+<<allocate space for pointers to labels>>=
+n = layout->nvar + layout->nvar + layout->ncov + layout->nsnp
+    + layout->ntrait;
+n *= sizeof(char *);
+if ((t = (char **)malloc(n)) == NULL) {
+    SET_ERR_MSG("unable to allocate %lu bytes for labels",
+        (unsigned long)n);
+    return 0;
+}
+layout->beta_labels  = t;
+layout->se_labels    = layout->beta_labels + layout->nvar;
+layout->cov_labels   = layout->se_labels   + layout->nvar;
+layout->snp_labels   = layout->cov_labels  + layout->ncov;
+layout->trait_labels = layout->snp_labels  + layout->nsnp;
+@
+
+The first [[nvar]] strings, each of length [[max_char]], correspond to
+the beta coefficient labels.
+%%
+Then come [[nvar]] standard error labels, followed by [[ncov]]
+covariance labels, [[nsnp]] snp labels, and finally [[ntrait]] trait
+labels.
+%%
+We move a pointer [[s]] over [[buf]] in jumps of [[max_char]] bytes.
+%%
+In other words, [[s]] always contains the address of the first
+character of some label.
+%%
+Thus we can store the label addresses and thus the labels in the
+corresponding label pointer bucket.
+
+<<store labels in pointer buckets>>=
+s = buf;
+for (i = 0; i < layout->nvar; i++, s += layout->max_char)
+    layout->beta_labels[i] = s;
+for (i = 0; i < layout->nvar; i++, s += layout->max_char)
+    layout->se_labels[i] = s;
+for (i = 0; i < layout->ncov; i++, s += layout->max_char)
+    layout->cov_labels[i] = s;
+for (i = 0; i < layout->nsnp; i++, s += layout->max_char)
+    layout->snp_labels[i] = s;
+for (i = 0; i < layout->ntrait; i++, s += layout->max_char)
+    layout->trait_labels[i] = s;
+@
+
+<<src/parse-layout-file.c functions>>=
+int validate_layout(struct Layout *layout)
+{
+    <<check that magic number is 6>>
+    <<check that doubles occupy >0 bytes>>
+    <<check that there are $\ge2$ covariates>>
+    <<check that we have >0 snps>>
+    <<check that we have >0 traits>>
+    <<check that we have >0 snps per tile>>
+    <<check that we have >0 traits per tile>>
+    <<check that labels have max length $\ge2$ bytes>>
+
+    return 1;
+}
+@
+
+By inspection of OmicABEL's source code we know that the
+[[magic_number]] must be a~6.
+
+<<check that magic number is 6>>=
+if (layout->magic_number != 6) {
+    SET_ERR_MSG("bad magic number in layout file: "
+        "expected 6, got %d", layout->magic_number);
+    return 0;
+}
+@
+
+A double must occupy more than 0 bytes.
+
+<<check that doubles occupy >0 bytes>>=
+if (layout->bytes_per_double <= 0) {
+    SET_ERR_MSG("bad number of bytes per double in layout file: "
+        "expected >0, got %d", layout->bytes_per_double);
+    return 0;
+}
+@
+
+We have at least 2~covariates: the intercept and the snp.
+
+<<check that there are $\ge2$ covariates>>=
+if (layout->nvar < 2) {
+    SET_ERR_MSG("bad number of covariates in layout file: "
+        "expected >=2, got %d", layout->nvar);
+    return 0;
+}
+@
+
+There must be at least one snp and one trait.
+
+<<check that we have >0 snps>>=
+if (layout->nsnp <= 0) {
+    SET_ERR_MSG("bad number of snps in layout file: "
+        "expected >0, got %d", layout->nsnp);
+    return 0;
+}
+@
+
+<<check that we have >0 traits>>=
+if (layout->ntrait <= 0) {
+    SET_ERR_MSG("bad number of traits in layout file: "
+        "expected >0, got %d", layout->ntrait);
+    return 0;
+}
+@
+
+There must be at least one snp and one trait per tile (see below).
+
+<<check that we have >0 snps per tile>>=
+if (layout->snps_per_tile <= 0) {
+    SET_ERR_MSG("bad number of snps per tile in layout file: "
+        "expected >0, got %d", layout->snps_per_tile);
+    return 0;
+}
+@
+
+<<check that we have >0 traits per tile>>=
+if (layout->traits_per_tile <= 0) {
+    SET_ERR_MSG("bad number of traits per tile in layout file: "
+        "expected >0, got %d", layout->traits_per_tile);
+    return 0;
+}
+@
+
+The smallest possible label consists of a single character.
+%%
+Therefore there must be at least two bytes of space for every label,
+one for the label itself and one for the terminating nul byte.
+
+<<check that labels have max length $\ge2$ bytes>>=
+if (layout->max_char < 2) {
+    SET_ERR_MSG("bad max label length in layout file: "
+        "expected >=2, got %d", layout->max_char);
+    return 0;
+}
+@
+
+For testing purposes we will also need a function for writing layout
+files.
+
+<<src/parse-layout-file.c functions>>=
+int write_layout_file(const char *file, struct Layout *layout)
+{
+    int a[8], i;
+    FILE *fp;
+    char *buf, *s;
+    size_t n;
+
+    if ((fp = fopen(file, "wb")) == NULL) {
+        SET_ERR_MSG("unable to open layout file for writing: %s", file);
+        return 0;
+    }
+
+    <<check that labels have max length $\ge2$ bytes>>
+    <<check that we have >0 snps>>
+    <<check that we have >0 traits>>
+    <<check that there are >0 covariates>>
+
+    a[0] = layout->magic_number;
+    a[1] = layout->bytes_per_double;
+    a[2] = layout->nvar;
+    a[3] = layout->nsnp;
+    a[4] = layout->ntrait;
+    a[5] = layout->snps_per_tile;
+    a[6] = layout->traits_per_tile;
+    a[7] = layout->max_char;
+
+    assert(fwrite(a, sizeof(int), NELEMS(a), fp) == NELEMS(a));
+    if (ferror(fp)) {
+        SET_ERR_MSG("error while writing layout file: %s", file);
+        return 0;
+    }
+
+    <<write labels to layout file>>
+
+    if (fclose(fp)) {
+        SET_ERR_MSG("unable to close layout file after writing: %s", file);
+        return 0;
+    }
+
+    return 1;
+}
+@
+
+<<src/parse-layout-file.c includes>>=
+#include <stdio.h>
+#include <stddef.h>
+#include <assert.h>
+#include "err-msg.h"
+@
+
+<<check that there are >0 covariates>>=
+if (layout->nvar <= 0) {
+    SET_ERR_MSG("bad number of covariates in layout file: "
+        "expected >0, got %d", layout->nvar);
+    return 0;
+}
+@
+
+<<write labels to layout file>>=
+<<allocate temporary buffer for labels>>
+<<copy labels into temporary buffer>>
+<<write temporary buffer to layout file>>
+<<free memory of temporary label buffer>>
+@
+
+Since we are going to use [[buf]] for storing NUL terminated strings
+we initialize it with NUL characters.
+
+<<allocate temporary buffer for labels>>=
+n = layout->nvar + layout->nvar + layout->ncov + layout->nsnp + layout->ntrait;
+n *= layout->max_char;
+if ((buf = (char *)malloc(n * sizeof(char))) == NULL) {
+    SET_ERR_MSG("unable to allocate %lu bytes", (unsigned long)n);
+    return 0;
+}
+for (i = 0; (unsigned)i < n; i++)
+    buf[i] = '\0';
+@
+
+To be on the safe side we will explicitly terminate every label with a
+NUL character.
+
+<<copy labels into temporary buffer>>=
+s = buf;
+for (i = 0; i < layout->nvar; i++, s += layout->max_char) {
+    strncpy(s, layout->beta_labels[i], layout->max_char);
+    s[layout->max_char - 1] = '\0';
+}
+for (i = 0; i < layout->nvar; i++, s += layout->max_char) {
+    strncpy(s, layout->se_labels[i], layout->max_char);
+    s[layout->max_char - 1] = '\0';
+}
+for (i = 0; i < layout->ncov; i++, s += layout->max_char) {
+    strncpy(s, layout->cov_labels[i], layout->max_char);
+    s[layout->max_char - 1] = '\0';
+}
+for (i = 0; i < layout->nsnp; i++, s += layout->max_char) {
+    strncpy(s, layout->snp_labels[i], layout->max_char);
+    s[layout->max_char - 1] = '\0';
+}
+for (i = 0; i < layout->ntrait; i++, s += layout->max_char) {
+    strncpy(s, layout->trait_labels[i], layout->max_char);
+    s[layout->max_char - 1] = '\0';
+}
+@
+
+<<src/parse-layout-file.c includes>>=
+#include <stdlib.h>
+#include <string.h>
+@
+
+<<write temporary buffer to layout file>>=
+assert(fwrite(buf, n, 1, fp) == 1);
+@
+
+<<free memory of temporary label buffer>>=
+free(buf);
+buf = NULL;
+@
+
+Every entry with regression results in the data file is ordered in the
+same way.
+%%
+There are [[nvar]] beta column, then [[nvar]] standard error columns,
+and eventually [[ncov]] covariance columns.
+%%
+By using the [[--column]] option on the command-line the user not only
+decides which of these columns will be included in the output but also
+in which order they will be included.
+%%
+We will map the position of a user-supplied column label (user column
+position, [[ucp]]) to the index of the corresponding column among the
+above regression result columns (actual column position, [[acp]]).
+
+<<src/parse-layout-file.c functions>>=
+int set_column_print_order(char **columns, int ncolumn, int *ucp2acp,
+    struct Layout *layout)
+{
+    int i, j, n, found;
+    char *s;
+
+    n = layout->nvar + layout->nvar + layout->ncov;
+
+    for (i = 0; i < ncolumn; i++) {
+
+        found = 0;
+        s = columns[i];
+
+        <<search user column label among beta labels>>
+        <<search user column label among standard error labels>>
+        <<search user column label among covariance labels>>
+
+        if (!found) {
+            SET_ERR_MSG("user-specified column doesn't exist: %s", s);
+            return 0;
+        }
+    }
+    return 1;
+}
+@
+
+<<search user column label among beta labels>>=
+for (j = 0; j < layout->nvar && !found; j++) {
+    if (!strncmp(s, layout->beta_labels[j], layout->max_char)) {
+        ucp2acp[i] = j;
+        found = 1;
+    }
+}
+@
+
+<<search user column label among standard error labels>>=
+for (j = 0; j < layout->nvar && !found; j++) {
+    if (!strncmp(s, layout->se_labels[j], layout->max_char)) {
+        ucp2acp[i] = layout->nvar + j;
+        found = 1;
+    }
+}
+@
+
+<<search user column label among covariance labels>>=
+for (j = 0; j < layout->ncov && !found; j++) {
+    if (!strncmp(s, layout->cov_labels[j], layout->max_char)) {
+        ucp2acp[i] = layout->nvar + layout->nvar + j;
+        found = 1;
+    }
+}
+@
+
+%% ===================================================================
+\section{Parsing the data file}\label{sec:data}
+%% ===================================================================
+
+The binary data file contains the estimates that result from
+regressing [[ntrait]] traits on [[nsnp]] snps.
+%%
+We can imagine all the possible regressions to be arranged into a
+matrix where every row corresponds to a trait and every column to a snp.
+%%
+In the end, OmicABEL will have computed regression estimates
+corresponding to all cells in this matrix.
+%%
+However, for computational reasons OmicABEL does not proceed line by
+line or row by row when running the regressions.
+%%
+Instead, OmicABEL subdivides the matrix into so-called ``tiles'' and
+processes one tile at a time, from left to right and from top to
+bottom.
+
+Here is an example.
+%%
+Suppose we have the following setup.
+%%
+$$
+\begin{tabular}{|lr|}
+  \hline
+  [[nsnps]]&          10\\
+  [[ntraits]]&         8\\
+  [[snps_per_tile]]&   4\\
+  [[traits_per_tile]]& 3\\\hline
+\end{tabular}
+$$
+Figure~1 shows what the structure of the data file corresponding to
+this setup would look like.
+%%
+Note that we use 0-based numbering for both traits and snps.
+%%
+This is the way C works and using the same convention here ensures
+that we do not have to add or subtract ones when switching between the
+code represention of the matrix and its visual representation given in
+this example.
+%%
+$$
+\begin{tabular}{lr|rrrr|rrrr|rr|}
+&\omit\strut&\multicolumn{10}{c}{snps}\\\noalign{\medskip}
+&\omit\strut& 0& 1& 2& \multicolumn1r3& 4& 5& 6& \multicolumn1r7& 8& \multicolumn1r9\\\cline{3-12}
+             &0& 0& 1& 2& 3& 12& 13& 14& 15& 24& 25\vrule height 11pt depth 0pt width 0pt\\
+             &1& 4& 5& 6& 7& 16& 17& 18& 19& 26& 27\\
+             &2& 8& 9& 10& 11& 20& 21& 22& 23& 28& 29\\\cline{3-12}
+             &3& 30& 31& 32& 33& 42& 43& 44& 45& 54& 55\vrule height 11pt depth 0pt width 0pt\\
+\llap{traits}&4& 34& 35& 36& 37& 46& 47& 48& 49& 56& 57\\
+             &5& 38& 39& 40& 41& 50& 51& 52& 53& 58& 59\\\cline{3-12}
+             &6& 60& 61& 62& 63& 68& 69& 70& 71& 76& 77\vrule height 11pt depth 0pt width 0pt\\
+             &7& 64& 65& 66& 67& 72& 73& 74& 75& 78& 79\\\cline{3-12}
+\end{tabular}
+$$
+\nobreak
+\medskip
+\centerline{Figure 1. Layout of regression results in the data file.}
+
+\noindent The numbers in the matrix represent the offset into the
+data file at which the regression estimates of the associated
+trait-snp pair can be found.
+%%
+For example, the regression estimates obtained from regressing trait~7
+on snp~6 can be found at offset~74.
+%%
+The regression results for a given trait-snp pair consist of [[nvar]]
+betas, [[nvar]] standard errors, and [[ncov]] covariances.
+
+The matrix in Figure~1 is subdivided into 9~tiles, where tiles are
+separated from each other with vertical and horizontal lines.
+%%
+Tiles are ordered and the order is defined by the offsets in the
+cells.
+%%
+A tile containing higher offsets ranks higher than a tile with lower
+offsets.
+%%
+The regression estimates of the first tile can be found at offsets 0
+through~11.
+%%
+The regression estimates of the second tile can be found at offsets 12
+through~23, and so on.
+%%
+If we replace the tiles' contents by their respective rank, we get the
+matrix depicted in Figure~2.
+%%
+$$
+\def\strut{\vrule height 10pt depth 0pt width 0pt }
+\begin{tabular}{c|c|c|c|}
+ \omit&\multicolumn{3}{c}{snps}\\\noalign{\smallskip}\cline{2-4}
+             &1&2&3\strut\\\cline{2-4}
+\llap{traits}&4&5&6\strut\\\cline{2-4}
+             &7&8&9\strut\\\cline{2-4}
+\end{tabular}
+$$
+\nobreak
+\medskip
+\centerline{Figure 2. Order of tiles within the data file.}
+%%
+Thus the order of tiles corresponds to their position in the
+data file.
+%%
+First come the regression estimates of tile~1, then of tile~2, and so
+on.
+%%
+We will use the term \emph{tile row} to refer to a row of tiles.
+%%
+The above matrix has three tile rows consisting of tiles 1 through~3,
+tiles 4 through~6, and tiles 7 through~9, respectively.
+%%
+We use the term \emph{tile column} to refer to a column of tiles.
+%%
+The above matrix has three tile columns consisting of tiles 1, 4, 7,
+tiles 2, 5, 8, and tiles 3, 6, 9, respectively.
+
+With every tile we can associate the set of traits corresponding to
+the rows occupied by the tile and the set of snps corresponding to the
+columns that the tile occupies.
+%%
+For example, tile~5 corresponds to traits 3 to~5 and snps 4 to~7.
+%%
+A tile contains the regression estimates resulting from regressing
+every element of its set of traits on every element of its set of
+snps.
+
+Every tile, except maybe those at the lower and right margin, contains
+[[traits_per_tile]] * [[snps_per_tile]] regression estimates.
+%%
+If [[snps_per_tile]] does not divide [[nsnp]] evenly, the tiles at the
+right margin will represent [[nsnp]] modulo [[snps_per_tile]] instead
+of [[snps_per_tile]] snps.
+%%
+Similarly, if [[traits_per_tile]] does not divide [[ntrait]] evenly,
+the tiles at the bottom margin will represent [[ntrait]] modulo
+[[traits_per_tile]] instead of [[traits_per_tile]] snps.
+
+When converting the binary data file into a human-readable plain
+text file, we have a choice as to the order in which we process the
+data file.
+%%
+One way would be to go through the data file in sequential order
+starting at offset~0.
+%%
+Due to the layout of the data file this is the same as proceeding by
+tile starting at tile~0.
+%%
+If we want to include the regression estimates at a given offset in
+the output, we would have to map the offset to a trait index and a snp
+index.
+%%
+For example, being at offset~47, we look up the row and column
+and find that the offset holds the regression estimates for trait~4
+and snp~5.
+
+<<src/parse-data-file.h>>=
+#ifndef PARSE_DATA_FILE_H
+#define PARSE_DATA_FILE_H
+#include "parse-layout-file.h"
+
+void offset2index(unsigned long offset, int *snp, int *trait,
+    struct Layout *layout);
+void index2offset(int snp, int trait, unsigned long *offset,
+    struct Layout *layout);
+#endif  /* PARSE_DATA_FILE_H */
+@
+
+<<src/parse-data-file.c>>=
+<<src/parse-data-file.c includes>>
+<<src/parse-data-file.c functions>>
+@
+
+<<src/parse-data-file.c includes>>=
+#include "parse-data-file.h"
+@
+
+Here is the code that maps an offset to a snp index and a trait index.
+
+<<src/parse-data-file.c functions>>=
+void offset2index(unsigned long offset, int *snp, int *trait, struct Layout *layout)
+{
+    int elts_per_tile_row, elts_per_tile, snps_in_this_tile;
+    int tile_row, tile_col, row_within_tile, col_within_tile;
+    int snps_per_tile, traits_per_tile, nsnp, ntrait;
+    unsigned long x;
+
+    snps_per_tile = layout->snps_per_tile;
+    traits_per_tile = layout->traits_per_tile;
+    nsnp = layout->nsnp;
+    ntrait = layout->ntrait;
+
+    x = offset;
+    <<find tile row>>
+    <<find tile column>>
+    <<find row within tile>>
+    <<find column within tile>>
+
+    *trait = tile_row * traits_per_tile + row_within_tile;
+    *snp   = tile_col * snps_per_tile   + col_within_tile;
+}
+@
+
+<<src/parse-data-file.c includes>>=
+#include "parse-layout-file.h"
+@
+
+Figure~3 describes how to map offset~47 to trait~4 and snp~5.
+
+%% Contents of tile 5.
+\setbox3=\vbox{\halign{&#\enspace\hfil\cr
+42&43&44&\omit45\cr
+46&47&48&\omit49\cr
+50&51&52&\omit53\cr}}
+
+%% Second row of tile 5.
+\setbox4=\vbox{\halign{&#\enspace\hfil\cr
+46&47&48&\omit49\cr}}
+
+%% Second element of second row of tile 5.
+\setbox5=\vbox{\halign{#\hfil\cr 47\cr}}
+
+\bigskip
+\hbox{\def\strut{\vrule height 10pt depth 0pt width 0pt }
+\valign{&\vfil\hbox{\enspace#\enspace}\vfil\cr
+\begin{tabular}{|c|c|c|}
+\hline
+1&2&3\strut\\\hline
+4&5&6\strut\\\hline
+7&8&9\strut\\\hline
+\end{tabular}\cr
+$\to$\cr
+\begin{tabular}{|c|c|c|}
+\hline
+4&5&6\strut\\\hline
+\end{tabular}\cr
+$\to$\cr
+\begin{tabular}{|c|}
+\hline
+5\strut\\\hline
+\end{tabular}\cr
+\omit\vfil\hbox{$=$}\vfil\cr
+\boxed{\box3}\cr
+$\to$\cr
+\boxed{\box4}\cr
+$\to$\cr
+\boxed{\box5}\cr
+}}\nobreak
+\centerline{Figure 3. Mapping offset~47 to trait~4 and snp~5.}
+\medskip
+
+In order to find the tile row into which the offset points we have to
+count how many times we can fit the cells contained in a tile row into
+the offset.
+%%
+We know that a typical tile row contains [[nsnp]] $\times$
+[[traits_per_tile]] cells.
+%%
+(It is true that the bottom tile row can contain fewer cells.
+%%
+But this is irrelevant for finding the tile row.)
+%%
+After finding the tile row we update the offset such that it becomes
+a valid offset into the tile row.
+
+<<find tile row>>=
+elts_per_tile_row = nsnp * traits_per_tile;
+tile_row = x / elts_per_tile_row;
+x %= elts_per_tile_row;
+@
+
+With the tile row found and the offset updated to point to one of its
+cells we now have to find the tile column.
+%%
+We need to count how many times we can fit the number of cells in a
+tile into the offset.
+%%
+A typical, full-size tile contains [[snps_per_tile]] $\times$
+[[traits_per_tile]] cells.
+%%
+However, if the total number of traits in the current and all
+following tile rows ([[ntrait]] $-$ [[tile_row]] $*$
+[[traits_per_tile]]) is smaller than the number of traits in a typical
+full-size tile, we are in an undersized bottom tile row.
+%%
+Since this effects all tiles in the row we cannot just ignore it as we
+ignored the undersized bottom tile row when searching for the tile
+row.
+%%
+After having found the tile column we need to update the offset such
+that it becomes a valid offset into the tile determine by tile row and
+tile column.
+
+<<find tile column>>=
+if (<<we are in a typical, full-size tile row>>)
+    elts_per_tile = snps_per_tile * traits_per_tile;
+else
+    elts_per_tile = snps_per_tile
+        * (ntrait - tile_row * traits_per_tile);
+tile_col = x / elts_per_tile;
+x %= elts_per_tile;
+@
+
+<<we are in a typical, full-size tile row>>=
+traits_per_tile <= ntrait - tile_row * traits_per_tile
+@
+
+To find the row \emph{within} the tile we have to count how many times
+we can fit the number of cells contained in a row of a tile into the
+offset.
+%%
+A typical, full-size row contains [[snps_per_tile]].
+%%
+However, if the total number of snps in the current and all following
+tile columns ([[nsnp]] $-$ [[tile_col]] $*$ [[snps_per_tile]]) is
+smaller than the number of snps in a typical full-size row, we are in
+an undersized rightmost tile column.
+%%
+After having found the row within the tile we update the offset such
+that it becomes a valid offset into the row.
+
+<<find row within tile>>=
+if (<<we are in a typical, full-size tile column>>)
+    snps_in_this_tile = snps_per_tile;
+else
+    snps_in_this_tile = nsnp - tile_col * snps_per_tile;
+row_within_tile = x / snps_in_this_tile;
+x %= snps_in_this_tile;
+@
+
+<<we are in a typical, full-size tile column>>=
+snps_per_tile <= nsnp - tile_col * snps_per_tile
+@
+
+The updated the offset already points to the column within the tile.
+
+<<find column within tile>>=
+col_within_tile = x;
+@
+
+Another way to process the data file, which is more efficient if only
+a small number of trait-snp pairs is to be extracted, is to jump
+directly to the offsets of specific trait-snp pairs.
+%%
+The [[index2offset]] function takes a snp and a trait and returns the
+offset in the data file at which the corresponding regression results
+can be found.
+%%
+The computation is very similar to the one used in [[offset2index]]
+and Figure~3 is helpful in following the steps.
+
+<<src/parse-data-file.c functions>>=
+void index2offset(int snp, int trait, unsigned long *offset,
+    struct Layout *layout)
+{
+    int tile_row, tile_col, row_within_tile, col_within_tile;
+    int snps_per_tile, traits_per_tile, nsnp, ntrait;
+    unsigned long x;
+
+    snps_per_tile = layout->snps_per_tile;
+    traits_per_tile = layout->traits_per_tile;
+    nsnp = layout->nsnp;
+    ntrait = layout->ntrait;
+
+    <<find tile row and tile column>>
+    <<find trait offset and snp offset>>
+
+    x = 0;
+    <<advance offset until just after tile row [[tile_row]]>>
+    <<advance offset until just after tile column [[tile_col]]>>
+    <<advance offset until just after row [[row_within_tile]]>>
+    <<advance offset until just after column [[col_within_tile]]>>
+
+    *offset = x;
+}
+@
+
+We find the tile row by counting how many tile rows, each containing
+[[traits_per_tile]] traits, we can fill before we reach trait
+[[trait]].
+%%
+Similarly, we find the tile column by counting how many tile columns,
+each containing [[snps_per_tile]] snps, we can fill before we reach
+snp [[snp]].
+
+<<find tile row and tile column>>=
+tile_row = trait / traits_per_tile;
+tile_col = snp / snps_per_tile;
+@
+
+The row within the tile is what's left from [[trait]] after filling
+[[tile_row]] tile rows.
+%%
+Similarly, the column within the tile is what's left from [[snp]]
+after filling [[tile_col]] tile columns.
+
+<<find trait offset and snp offset>>=
+row_within_tile = trait % traits_per_tile;
+col_within_tile = snp % snps_per_tile;
+@
+
+<<advance offset until just after tile row [[tile_row]]>>=
+x += tile_row * nsnp * traits_per_tile;
+@
+
+<<advance offset until just after tile column [[tile_col]]>>=
+if (<<we are in a typical, full-size tile row>>)
+    x += tile_col * snps_per_tile * traits_per_tile;
+else
+    x += tile_col * snps_per_tile
+        * (ntrait - tile_row * traits_per_tile);
+@
+
+<<advance offset until just after row [[row_within_tile]]>>=
+if (<<we are in a typical, full-size tile column>>)
+    x += row_within_tile * snps_per_tile;
+else
+    x += row_within_tile * (nsnp - tile_col * snps_per_tile);
+@
+
+<<advance offset until just after column [[col_within_tile]]>>=
+x += col_within_tile;
+@
+
+%% ===================================================================
+\section{Unit tests}
+%% ===================================================================
+
+%% -------------------------------------------------------------------
+\subsection{Parsing the command-line}
+%% -------------------------------------------------------------------
+
+<<test/test-parse-command-line-args.c>>=
+<<test/test-parse-command-line-args.c defines>>
+<<test/test-parse-command-line-args.c includes>>
+<<test/test-parse-command-line-args.c data>>
+
+TEST_GROUP(parse_command_line_args);
+
+<<test/test-parse-command-line-args.c setup>>
+<<test/test-parse-command-line-args.c tear-down>>
+<<test/test-parse-command-line-args.c test cases>>
+@
+
+<<test/test-parse-command-line-args.c includes>>=
+#include "unity_fixture.h"
+#include "parse-command-line-args.h"
+@
+
+<<test/test-parse-command-line-args.c setup>>=
+TEST_SETUP(parse_command_line_args)
+{
+    initialize_parameters(&params);
+    <<reset [[getopt_long]]>>
+    <<reset [[err_msg]]>>
+}
+@
+
+<<reset [[getopt_long]]>>=
+optind = 1;
+@
+
+<<test/test-parse-command-line-args.c includes>>=
+#include <getopt.h>
+@
+
+<<reset [[err_msg]]>>=
+err_msg[0] = '\0';
+@
+
+<<test/test-parse-command-line-args.c includes>>=
+#include "err-msg.h"
+@
+
+<<test/test-parse-command-line-args.c tear-down>>=
+TEST_TEAR_DOWN(parse_command_line_args)
+{
+}
+@
+
+Test that the long [[--help]] command-line argument is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, long_help)
+{
+    char *argv[] = {"ignore", "--help"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, params.help, "help");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, long_help);
+@
+
+<<test/test-parse-command-line-args.c defines>>=
+#define NELEMS(x) ((sizeof (x)) / (sizeof (x[0])))
+@
+
+<<test/test-parse-command-line-args.c data>>=
+static struct Params params;
+static int status;
+@
+
+Test that the short [[-h]] command-line option is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, short_help)
+{
+    char * argv[] = {"ignore", "-h"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, params.help, "help");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, short_help);
+@
+
+Test that the long [[--digits]] command-line option without equal sign
+is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, long_digits_without_equal)
+{
+    char *argv[] = {"ignore", "--digits", "3"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, params.ndigit, "ndigit");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, long_digits_without_equal);
+@
+
+Test that the long [[--digits]] command-line option with equal sign
+is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, long_digits_with_equal)
+{
+    char *argv[] = {"ignore", "--digits=4"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, params.ndigit, "ndigit");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, long_digits_with_equal);
+@
+
+Test that the short [[-d]] command-line option is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, short_digits)
+{
+    char *argv[] = {"ignore", "-d4"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(4, params.ndigit, "ndigit");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, short_digits);
+@
+
+Test that an all alphabetical argument to [[--digits]] results in an
+error message.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, bad_digits_gives_error)
+{
+    char *argv[] = {"ignore", "--digits", "foo"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "parse status");
+    TEST_ASSERT_EQUAL_STRING("unable to convert --digits to integer: foo", err_msg);
+}
+@
+
+<<test/test-parse-command-line-args.c includes>>=
+#include "err-msg.h"
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, bad_digits_gives_error);
+@
+
+Test that double printing format is set correctly.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, double_format)
+{
+    char *argv[] = {"ignore", "-d4", "test/data/input"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("%.4f", params.fmt, "fmt");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, double_format);
+@
+
+Test that supplying a number $\ge100$ as the argument to the
+[[--digits]] command-line option causes an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, digits_over_100_gives_error)
+{
+    char *argv[] = {"ignore", "--digits=100"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("argument to --digits must be <100", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, digits_over_100_gives_error);
+@
+
+<<parse command-line args installed includes>>=
+#include "err-msg.h"
+@
+
+Test that supplying a number $<0$ as the argument to the command-line
+option [[--digits]] causes an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, digits_under_0_gives_error)
+{
+    char *argv[] = {"ignore", "--digits=-10"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("argument to --digits must be >=0", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, digits_under_0_gives_error);
+@
+
+Test that the output file gets set correctly.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, output_file_is_set)
+{
+    char *argv[] = {"ignore", "--output", "foo"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_STRING("foo", params.output_file);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, output_file_is_set);
+@
+
+Test that user-supplied column labels are detected and saved in the
+correct order.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, column_labels_are_set)
+{
+    char *argv[] = {
+        "ignore", "--column", "foo", "--digits", "3", "--column=bar",
+        "--help", "-cbaz", "--help", "-c", "quux"
+    };
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT(4, params.ncolumn);
+    TEST_ASSERT_EQUAL_STRING("foo", params.columns[0]);
+    TEST_ASSERT_EQUAL_STRING("bar", params.columns[1]);
+    TEST_ASSERT_EQUAL_STRING("baz", params.columns[2]);
+    TEST_ASSERT_EQUAL_STRING("quux", params.columns[3]);
+
+    TEST_ASSERT_TRUE(params.ucp2acp != NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, params.ucp2acp[0], "ucp2acp[0]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, params.ucp2acp[1], "ucp2acp[1]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, params.ucp2acp[2], "ucp2acp[2]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, params.ucp2acp[3], "ucp2acp[3]");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-9, params.ucp2acp[4], "ucp2acp[4]");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, column_labels_are_set);
+@
+
+Test that forgetting to supply a column label after the [[--column]]
+command-line option causes an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, missing_column_label_argument_gives_error)
+{
+    char *argv[] = {"ignore", "--column"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "parse status");
+    TEST_ASSERT_EQUAL_STRING("missing argument: --column", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, missing_column_label_argument_gives_error);
+@
+
+Test that the [[--print-columns]] command-line option is recognized.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, print_columns_is_set)
+{
+    char *argv[] = {"ignore", "--print-columns"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, params.print_columns, "print_columns");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, print_columns_is_set);
+@
+
+Test that input files are set correctly.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, input_files_are_set)
+{
+    char *argv[] = {"ignore", "foo/bar"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.iout", params.layout_file, "layout file");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.out", params.data_file, "data file");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, input_files_are_set);
+@
+
+Test that forgetting to supply an input file lead to an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, missing_input_files_give_error)
+{
+    char *argv[] = {"ignore", "-otest/data/output.txt"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("missing command-line argument: FILE", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, missing_input_files_give_error);
+@
+
+Test that a non-writable output file results in an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, non_writable_output_file_gives_error)
+{
+    char *argv[] = {"ignore", "--output", "fake/file", "input_file"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("can't write to output file: fake/file", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, non_writable_output_file_gives_error);
+@
+
+Test that the output file, if not specified, defaults to [[stdout]].
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, output_file_defaults_to_stdout)
+{
+    char *argv[] = {"ignore", "test/data/input"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
+    TEST_ASSERT_TRUE_MESSAGE(params.output_file == NULL, "output file defaults to stdout");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, output_file_defaults_to_stdout);
+@
+
+<<parse command-line args installed includes>>=
+#include <stddef.h>
+@
+
+Test that an already existing and writable output file is accepted.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, existing_writable_output_file)
+{
+    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/input"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, existing_writable_output_file);
+@
+
+Test that a non-existing input file gives an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, non_existing_input_files_give_error)
+{
+    char *argv[] = {"ignore", "--output", "test/data/output.txt", "foo"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: foo.iout", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, non_existing_input_files_give_error);
+@
+
+Test that a non-existent layout file causes an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, non_existing_layout_file_gives_error)
+{
+    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/data_only"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: test/data/data_only.iout", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, non_existing_layout_file_gives_error);
+@
+
+Test that a non-existent data file causes an error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, non_existing_data_file_gives_error)
+{
+    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/layout_only"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: test/data/layout_only.out", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, non_existing_data_file_gives_error);
+@
+
+Test that a non-existing but writable output file is gone after having
+been tested for writability.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, non_existing_but_writable_output_file_gone_after_test)
+{
+    struct stat buf;
+    char *output_file = "test/data/delete_me.txt";
+    char *argv[] = {"ignore", "-o", output_file, "test/data/input"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
+
+    errno = 0;
+    status = stat(output_file, &buf);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, status, "stat return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(ENOENT, errno, "errno");
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, non_existing_but_writable_output_file_gone_after_test);
+@
+
+<<test/test-parse-command-line-args.c includes>>=
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+@
+
+Test that specifying an empty string as the output file causes an
+error.
+
+<<test/test-parse-command-line-args.c test cases>>=
+TEST(parse_command_line_args, empty_output_filename_gives_error)
+{
+    char *argv[] = {"ignore", "--output", "", "test/data/input"};
+
+    status = parse_command_line_args(NELEMS(argv), argv, &params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
+
+    <<reset [[err_msg]]>>
+    status = validate_command_line_args(&params);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
+    TEST_ASSERT_EQUAL_STRING("output filename must not be empty", err_msg);
+}
+@
+
+<<parse command-line args installed test cases>>=
+RUN_TEST_CASE(parse_command_line_args, empty_output_filename_gives_error);
+@
+
+<<test/test-runners/test-parse-command-line-args-runner.c>>=
+#include "unity_fixture.h"
+
+TEST_GROUP_RUNNER(parse_command_line_args)
+{
+    <<parse command-line args installed test cases>>
+}
+@
+
+%% -------------------------------------------------------------------
+\subsection{Parsing the layout file}
+%% -------------------------------------------------------------------
+
+<<test/test-parse-layout-file.c>>=
+<<test/test-parse-layout-file.c defines>>
+<<test/test-parse-layout-file.c includes>>
+<<test/test-parse-layout-file.c data>>
+
+TEST_GROUP(parse_layout_file);
+
+<<test/test-parse-layout-file.c setup>>
+<<test/test-parse-layout-file.c tear-down>>
+<<test/test-parse-layout-file.c test cases>>
+@
+
+<<test/test-parse-layout-file.c includes>>=
+#include "unity_fixture.h"
+#include "parse-layout-file.h"
+@
+
+<<test/test-parse-layout-file.c defines>>=
+#define NELEMS(x) ((sizeof (x)) / (sizeof (x[0])))
+@
+
+In order to test the layout file parsing functions we will create our
+own temporary layout file using [[write_layout_file]] and read from it
+using [[parse_layout_file]].
+
+<<test/test-parse-layout-file.c data>>=
+static const char *file = "test/tmp/foo.iout";
+@
+
+<<test/test-parse-layout-file.c data>>=
+static int status;
+static struct Layout out, in;
+
+static char *beta_labels[] = {"beta0", "beta1", "beta2"};
+static char *se_labels[] = {"se0", "se1", "se2"};
+static char *cov_labels[] = {"cov0_1", "cov0_2", "cov1_2"};
+static char *snp_labels[] = {"snp0", "snp1", "snp2", "snp3", "snp4",
+                             "snp5", "snp6", "snp7", "snp8", "snp9"};
+static char *trait_labels[] = {"trait0", "trait1", "trait2", "trait3",
+                               "trait4", "trait5", "trait6", "trait7"};
+@
+
+<<test/test-parse-layout-file.c setup>>=
+TEST_SETUP(parse_layout_file)
+{
+    <<initialize layout structure for writing>>
+    <<initialize layout structure for reading>>
+}
+@
+
+<<initialize layout structure for writing>>=
+out.magic_number     = 6;
+out.bytes_per_double = sizeof(double);
+out.nvar             = NELEMS(beta_labels);
+out.nsnp             = NELEMS(snp_labels);
+out.ntrait           = NELEMS(trait_labels);
+out.snps_per_tile    = 4;
+out.traits_per_tile  = 3;
+out.max_char         = 10;
+out.ncov             = ((NELEMS(beta_labels) - 1) * NELEMS(beta_labels)) / 2;
+out.beta_labels      = beta_labels;
+out.se_labels        = se_labels;
+out.cov_labels       = cov_labels;
+out.snp_labels       = snp_labels;
+out.trait_labels     = trait_labels;
+@
+
+<<initialize layout structure for reading>>=
+in.magic_number     = -1;
+in.bytes_per_double = -1;
+in.nvar             = -1;
+in.nsnp             = -1;
+in.ntrait           = -1;
+in.snps_per_tile    = -1;
+in.traits_per_tile  = -1;
+in.max_char         = -1;
+in.ncov             = -1;
+in.beta_labels      = NULL;
+in.se_labels        = NULL;
+in.cov_labels       = NULL;
+in.snp_labels       = NULL;
+in.trait_labels     = NULL;
+@
+
+<<test/test-parse-layout-file.c includes>>=
+#include <stddef.h>
+@
+
+<<test/test-parse-layout-file.c tear-down>>=
+TEST_TEAR_DOWN(parse_layout_file)
+{
+}
+@
+
+Test that when writing a layout file to disk and then reading it back
+in again we get the same layout.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, write_and_read_back_layout_file)
+{
+    int i;
+
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.magic_number,     in.magic_number,     "magic number");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.bytes_per_double, in.bytes_per_double, "bytes per double");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.nvar,             in.nvar,             "nvar");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.nsnp,             in.nsnp,             "nsnp");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.ntrait,           in.ntrait,           "ntrait");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.snps_per_tile,    in.snps_per_tile,    "snps per tile");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.traits_per_tile,  in.traits_per_tile,  "traits per tile");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.max_char,         in.max_char,         "max char");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(out.ncov,             in.ncov,             "ncov");
+
+    TEST_ASSERT_TRUE(in.beta_labels != NULL);
+    for (i = 0; i < out.nvar; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.beta_labels[i], in.beta_labels[i], "beta labels");
+
+    TEST_ASSERT_TRUE(in.se_labels != NULL);
+    for (i = 0; i < out.nvar; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.se_labels[i], in.se_labels[i], "se labels");
+
+    TEST_ASSERT_TRUE(in.cov_labels != NULL);
+    for (i = 0; i < ((out.nvar - 1) * out.nvar) / 2; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.cov_labels[i], in.cov_labels[i], "cov labels");
+
+    TEST_ASSERT_TRUE(in.snp_labels != NULL);
+    for (i = 0; i < out.nsnp; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.snp_labels[i], in.snp_labels[i], "snp labels");
+
+    TEST_ASSERT_TRUE(in.trait_labels != NULL);
+    for (i = 0; i < out.ntrait; i++)
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.trait_labels[i], in.trait_labels[i], "trait labels");
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, write_and_read_back_layout_file);
+@
+
+Test that a bad magic number causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_magic_number)
+{
+    out.magic_number = 99;  /* should be 6 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad magic number in layout file: expected 6, got 99", err_msg);
+}
+@
+
+<<test/test-parse-layout-file.c includes>>=
+#include "err-msg.h"
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_magic_number);
+@
+
+Test that a negative number of bytes per double causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_bytes_per_double)
+{
+    out.bytes_per_double = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of bytes per double in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_bytes_per_double);
+@
+
+Test that a too small number of covariates causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_number_of_covariates)
+{
+    out.nvar = 1;  /* should be >=2 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout file: expected >=2, got 1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_number_of_covariates);
+@
+
+Test that [[write_layout_file]] throws an error upon receiving a
+non-positive number of snps in the layout structure.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, non_positive_number_of_snps_causes_error_in_write_layout_file)
+{
+    out.nsnp = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, non_positive_number_of_snps_causes_error_in_write_layout_file);
+@
+
+Test that [[write_layout_file]] throws an error upon receiving a
+non-positive number of traits in the layout structure.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, non_positive_number_of_traits_causes_error_in_write_layout_file)
+{
+    out.ntrait = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, non_positive_number_of_traits_causes_error_in_write_layout_file);
+@
+
+Test that [[write_layout_file]] throws an error upon receiving a
+non-positive number of covariates in the layout structure.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, non_positive_number_of_covariates_causes_error_in_write_layout_file)
+{
+    out.nvar = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, non_positive_number_of_covariates_causes_error_in_write_layout_file);
+@
+
+Test that [[write_layout_file]] throws an error upon receiving a
+non-positive number of covariates in the layout structure.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, max_char_smaller_than_2_causes_error_in_write_layout_file)
+{
+    out.max_char = -1;  /* should be >=2 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: expected >=2, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, max_char_smaller_than_2_causes_error_in_write_layout_file);
+@
+
+Test that a non-positive number of snps in the layout file causes an
+error.
+%%
+Note that we cannot set [[nsnp]] before writing the layout to disk.
+%%
+Otherwise [[write_layout_file]] would throw an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_number_of_snps)
+{
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    in.nsnp = -1;  /* should be >0 */
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_number_of_snps);
+@
+
+Test that a non-positive number of traits in the layout file causes an
+error.
+%%
+Note that we cannot set [[ntrait]] before writing the layout to disk.
+%%
+Otherwise [[write_layout_file]] would throw an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_number_of_traits)
+{
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    in.ntrait = -1;  /* should be >0 */
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_number_of_traits);
+@
+
+Test that a non-positive number of snps per tile in the layout file
+causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_number_of_snps_per_tile)
+{
+    out.snps_per_tile = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps per tile in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_number_of_snps_per_tile);
+@
+
+Test that a non-positive number of traits per tile in the layout file
+causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_number_of_traits_per_tile)
+{
+    out.traits_per_tile = -1;  /* should be >0 */
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits per tile in layout file: expected >0, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_number_of_traits_per_tile);
+@
+
+Test that a max label length of $<2$ in layout file causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, bad_max_label_length)
+{
+    status = write_layout_file(file, &out);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    in.max_char = -1;  /* should be >=2 */
+    status = validate_layout(&in);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: expected >=2, got -1", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, bad_max_label_length);
+@
+
+Test that we are able to map a user-supplied subset of column labels
+to the respective columns in the layout file.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, set_column_print_order_with_subset_of_columns)
+{
+    /* column label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
+    /* column index: 0     1     2     3   4   5   6      7      8      */
+
+    char *columns[] = {"se2", "cov0_2", "beta1"};
+    int correct_ucp2acp[] = {5, 7, 1, -9};
+    int ucp2acp[] = {-1, -1, -1, -9};
+    int ncolumn = NELEMS(columns);
+
+    status = write_layout_file(file, &out);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+
+    status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "set_column_print_order return value");
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[0], ucp2acp[0], "se2");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[1], ucp2acp[1], "cov0_2");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[2], ucp2acp[2], "beta1");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[3], ucp2acp[3], "-9");
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, set_column_print_order_with_subset_of_columns);
+@
+
+Test that we are able to map user-supplied column labels that form a
+permutation of the actual column labels in the layout file to the
+actual labels in the layout file.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, set_permuted_column_print_order)
+{
+    /* column label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
+    /* column index: 0     1     2     3   4   5   6      7      8      */
+
+    char *columns[] = {"cov1_2", "beta2", "se1", "cov0_1", "se0", "beta0", "se2", "cov0_2", "beta1"};
+    int correct_ucp2acp[] = {8, 2, 4, 6, 3, 0, 5, 7, 1, -9};
+    int ucp2acp[] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -9};
+    int ncolumn = NELEMS(columns);
+
+    status = write_layout_file(file, &out);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+
+    status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "set_column_print_order return value");
+
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[0], ucp2acp[0]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[1], ucp2acp[1]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[2], ucp2acp[2]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[3], ucp2acp[3]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[4], ucp2acp[4]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[5], ucp2acp[5]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[6], ucp2acp[6]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[7], ucp2acp[7]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[8], ucp2acp[8]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[9], ucp2acp[9]);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, set_permuted_column_print_order);
+@
+
+Test that a user-supplied column label that does not correspond to any
+actual column label in the layout file causes an error.
+
+<<test/test-parse-layout-file.c test cases>>=
+TEST(parse_layout_file, invalid_user_supplied_column_label)
+{
+    char *columns[] = {"cov1_2", "beta2", "foobar"};
+    int ucp2acp[] = {-1, -1, -1, -9};
+    int ncolumn = NELEMS(columns);
+
+    status = write_layout_file(file, &out);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+
+    status = parse_layout_file(file, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+
+    status = validate_layout(&in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+
+    status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "set_column_print_order return value");
+    TEST_ASSERT_EQUAL_STRING("user-specified column doesn't exist: foobar", err_msg);
+}
+@
+
+<<parse layout file installed test cases>>=
+RUN_TEST_CASE(parse_layout_file, invalid_user_supplied_column_label);
+@
+
+<<test/test-runners/test-parse-layout-file-runner.c>>=
+#include "unity_fixture.h"
+
+TEST_GROUP_RUNNER(parse_layout_file)
+{
+    <<parse layout file installed test cases>>
+}
+@
+
+%% -------------------------------------------------------------------
+\subsection{Parsing the data file}
+%% -------------------------------------------------------------------
+
+<<test/test-parse-data-file.c>>=
+<<test/test-parse-data-file.c defines>>
+<<test/test-parse-data-file.c includes>>
+<<test/test-parse-data-file.c data>>
+
+TEST_GROUP(parse_data_file);
+
+<<test/test-parse-data-file.c setup>>
+<<test/test-parse-data-file.c tear-down>>
+<<test/test-parse-data-file.c test cases>>
+@
+
+<<test/test-parse-data-file.c includes>>=
+#include "unity_fixture.h"
+#include "parse-data-file.h"
+@
+
+<<test/test-parse-data-file.c defines>>=
+#define NELEMS(x) ((sizeof (x)) / (sizeof (x[0])))
+@
+
+The layout of the data file in the below test cases is shown in
+section~\ref{sec:data}.
+%%
+Both the [[snp_index]] array and the [[trait_index]] array are indexed
+by offset and contain the snp and the trait whose regression results
+are located at the given offset.
+
+<<test/test-parse-data-file.c data>>=
+static struct Layout layout;
+static int snp_index[] = {
+    0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,  /* tile 1 */
+    4, 5, 6, 7, 4, 5, 6, 7, 4, 5, 6, 7,  /* tile 2 */
+    8, 9, 8, 9, 8, 9,                    /* tile 3 */
+    0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,  /* tile 4 */
+    4, 5, 6, 7, 4, 5, 6, 7, 4, 5, 6, 7,  /* tile 5 */
+    8, 9, 8, 9, 8, 9,                    /* tile 6 */
+    0, 1, 2, 3, 0, 1, 2, 3,              /* tile 7 */
+    4, 5, 6, 7, 4, 5, 6, 7,              /* tile 8 */
+    8, 9, 8, 9                           /* tile 9 */
+};
+static int trait_index[] = {
+    0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,  /* tile 1 */
+    0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,  /* tile 2 */
+    0, 0, 1, 1, 2, 2,                    /* tile 3 */
+    3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,  /* tile 4 */
+    3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,  /* tile 5 */
+    3, 3, 4, 4, 5, 5,                    /* tile 6 */
+    6, 6, 6, 6, 7, 7, 7, 7,              /* tile 7 */
+    6, 6, 6, 6, 7, 7, 7, 7,              /* tile 8 */
+    6, 6, 7, 7                           /* tile 9 */
+};
+@
+
+The two-dimensional [[offsets]] array is indexed by snp (first
+dimension) and trait (second dimension) and contains the file offset
+where the regression results for the given trait-snp pair can be
+found.
+
+<<test/test-parse-data-file.c data>>=
+static unsigned long offsets[10][8] = {
+    { 0,  4,  8, 30, 34, 38, 60, 64},  /* snp 0 */
+    { 1,  5,  9, 31, 35, 39, 61, 65},  /* snp 1 */
+    { 2,  6, 10, 32, 36, 40, 62, 66},  /* snp 2 */
+    { 3,  7, 11, 33, 37, 41, 63, 67},  /* snp 3 */
+    {12, 16, 20, 42, 46, 50, 68, 72},  /* snp 4 */
+    {13, 17, 21, 43, 47, 51, 69, 73},  /* snp 5 */
+    {14, 18, 22, 44, 48, 52, 70, 74},  /* snp 6 */
+    {15, 19, 23, 45, 49, 53, 71, 75},  /* snp 7 */
+    {24, 26, 28, 54, 56, 58, 76, 78},  /* snp 8 */
+    {25, 27, 29, 55, 57, 59, 77, 79},  /* snp 9 */
+};
+@
+
+<<test/test-parse-data-file.c includes>>=
+#include "parse-layout-file.h"
+@
+
+<<test/test-parse-data-file.c setup>>=
+TEST_SETUP(parse_data_file)
+{
+    layout.magic_number     = -1;
+    layout.bytes_per_double = -1;
+    layout.nvar             = -1;
+    layout.nsnp             = 10;
+    layout.ntrait           = 8;
+    layout.snps_per_tile    = 4;
+    layout.traits_per_tile  = 3;
+    layout.max_char         = -1;
+    layout.ncov             = -1;
+    layout.beta_labels      = NULL;
+    layout.se_labels        = NULL;
+    layout.cov_labels       = NULL;
+    layout.snp_labels       = NULL;
+    layout.trait_labels     = NULL;
+}
+@
+
+<<test/test-parse-data-file.c tear-down>>=
+TEST_TEAR_DOWN(parse_data_file)
+{
+}
+@
+
+Test whether offsets are correctly mapped to snps and traits.
+
+<<test/test-parse-data-file.c test cases>>=
+TEST(parse_data_file, offset2index)
+{
+    int i, n, snp, trait;
+
+    n = layout.nsnp * layout.ntrait;
+
+    for (i = 0; i < n; i++) {
+        offset2index(i, &snp, &trait, &layout);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(snp_index[i], snp, "snp index");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(trait_index[i], trait, "trait index");
+    }
+}
+@
+
+<<parse data file installed test cases>>=
+RUN_TEST_CASE(parse_data_file, offset2index);
+@
+
+Test whether trait-snp pairs are correctly mapped to offsets.
+
+<<test/test-parse-data-file.c test cases>>=
+TEST(parse_data_file, index2offset)
+{
+    int snp, trait;
+    unsigned long offset;
+
+    for (snp = 0; snp < layout.nsnp; snp++) {
+        for (trait = 0; trait < layout.ntrait; trait++) {
+            index2offset(snp, trait, &offset, &layout);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(offsets[snp][trait], offset, "offset");
+        }
+    }
+}
+@
+
+<<parse data file installed test cases>>=
+RUN_TEST_CASE(parse_data_file, index2offset);
+@
+
+<<test/test-runners/test-parse-data-file-runner.c>>=
+#include "unity_fixture.h"
+
+TEST_GROUP_RUNNER(parse_data_file)
+{
+    <<parse data file installed test cases>>
+}
+@
+
+%% -------------------------------------------------------------------
+\subsection{Run all tests}
+%% -------------------------------------------------------------------
+
+<<test/test-runners/all-tests.c>>=
+#include "unity_fixture.h"
+
+static void RunAllTests(void)
+{
+    RUN_TEST_GROUP(parse_command_line_args);
+    RUN_TEST_GROUP(parse_layout_file);
+    RUN_TEST_GROUP(parse_data_file);
+}
+
+int main(int argc, const char *argv[])
+{
+    return UnityMain(argc, argv, RunAllTests);
+}
+@
+
+%% ===================================================================
+\section{Makefile}
+%% ===================================================================
+
+<<makefile>>=
+# Set environment variable UNITY_HOME to point to unity's top-level
+# directory or set explicitly using the below make variable.
+# UNITY_HOME = path/to/unity
+CFLAGS = -Wall -Wextra -g
+UNITY_INCLUDES = -I$(UNITY_HOME)/src -I$(UNITY_HOME)/extras/fixture/src
+
+UNITY_SOURCES = $(UNITY_HOME)/src/unity.c \
+                $(UNITY_HOME)/extras/fixture/src/unity_fixture.c
+
+SOURCES = src/parse-command-line-args.c \
+          src/parse-layout-file.c \
+          src/parse-data-file.c \
+          src/err-msg.c \
+          test/test-parse-command-line-args.c \
+          test/test-runners/test-parse-command-line-args-runner.c \
+          test/test-parse-layout-file.c \
+          test/test-runners/test-parse-layout-file-runner.c \
+          test/test-parse-data-file.c \
+          test/test-runners/test-parse-data-file-runner.c \
+          test/test-runners/all-tests.c
+
+OBJECTS = src/parse-command-line-args.o \
+          src/parse-layout-file.o \
+          src/parse-data-file.o \
+          src/err-msg.o \
+          test/test-parse-command-line-args.o \
+          test/test-runners/test-parse-command-line-args-runner.o \
+          test/test-parse-layout-file.o \
+          test/test-runners/test-parse-layout-file-runner.o \
+          test/test-parse-data-file.o \
+          test/test-runners/test-parse-data-file-runner.o \
+          test/test-runners/all-tests.o
+
+TESTS = test/test-runners/all-tests
+DOCUMENTATION = doc/r3shuffle.pdf
+
+.PHONY: all test clean doc
+all: $(TESTS) test
+doc: $(DOCUMENTATION)
+test: test/test-runners/all-tests.out
+clean:
+	rm -f $(TESTS) $(OBJECTS) $(SOURCES) doc/*
+
+# ==== all-tests =====================================================
+
+test/test-runners/all-tests.out: test/test-runners/all-tests
+	test/test-runners/all-tests | tee $@
+
+test/test-runners/all-tests: $(OBJECTS) $(UNITY_SOURCES)
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -o $@ $^
+
+test/test-runners/all-tests.o: test/test-runners/all-tests.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-runners/all-tests.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-command-line-args-runner ===========================
+
+test/test-runners/test-parse-command-line-args-runner.o: \
+        test/test-runners/test-parse-command-line-args-runner.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-runners/test-parse-command-line-args-runner.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-layout-file-runner ===========================
+
+test/test-runners/test-parse-layout-file-runner.o: \
+        test/test-runners/test-parse-layout-file-runner.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-runners/test-parse-layout-file-runner.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-data-file-runner ===========================
+
+test/test-runners/test-parse-data-file-runner.o: \
+        test/test-runners/test-parse-data-file-runner.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-runners/test-parse-data-file-runner.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-command-line-args ==================================
+
+test/test-parse-command-line-args.o: test/test-parse-command-line-args.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-parse-command-line-args.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-layout-file ==================================
+
+test/test-parse-layout-file.o: test/test-parse-layout-file.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-parse-layout-file.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== test-parse-data-file ==================================
+
+test/test-parse-data-file.o: test/test-parse-data-file.c
+	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
+
+test/test-parse-data-file.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== parse-command-line-args =======================================
+
+src/parse-command-line-args.o: src/parse-command-line-args.c \
+                               src/parse-command-line-args.h \
+                               src/err-msg.h
+	gcc $(CFLAGS) -Isrc -c -o $@ $<
+
+src/parse-command-line-args.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+src/parse-command-line-args.h: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== parse-layout-file =======================================
+
+src/parse-layout-file.o: src/parse-layout-file.c \
+                         src/parse-layout-file.h \
+                         src/err-msg.h
+	gcc $(CFLAGS) -Isrc -c -o $@ $<
+
+src/parse-layout-file.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+src/parse-layout-file.h: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== parse-data-file =======================================
+
+src/parse-data-file.o: src/parse-data-file.c \
+                         src/parse-data-file.h \
+                         src/err-msg.h
+	gcc $(CFLAGS) -Isrc -c -o $@ $<
+
+src/parse-data-file.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+src/parse-data-file.h: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== err-msg =======================================================
+
+src/err-msg.o: src/err-msg.c src/err-msg.h
+	gcc $(CFLAGS) -Isrc -c -o $@ $<
+
+src/err-msg.c: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+src/err-msg.h: program.nw
+	notangle -R$@ -t4 -L $< > $@
+
+# ==== documentation =================================================
+
+doc/r3shuffle.pdf: tmp/r3shuffle.tex
+	pdflatex -output-directory doc $<
+	mv doc/r3shuffle.aux doc/r3shuffle.log tmp/
+
+tmp/r3shuffle.tex: program.nw
+	noweave -delay -t4 $< > $@
+
+# ==== makefile ======================================================
+
+makefile: program.nw
+	notangle -R$@ -t4 $< > $@ && $(MAKE) && exit 0
+@ \end{document}
