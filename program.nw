@@ -242,15 +242,13 @@ allocated cell.
 
 <<remember selected column>>=
 n = (params->ncolumn + 1) * sizeof(char *);
-if ((t = (char **)realloc(params->columns, n)) != NULL) {
-    params->columns = t;
-    params->columns[params->ncolumn++] = optarg;
-}
-else {
+if ((t = (char **)realloc(params->columns, n)) == NULL) {
     SET_ERR_MSG("can't realloc %lu bytes for user-supplied column "
         "labels", (unsigned long)n);
     return 0;
 }
+params->columns = t;
+params->columns[params->ncolumn++] = optarg;
 @
 
 <<src/parse-coc includes>>=
