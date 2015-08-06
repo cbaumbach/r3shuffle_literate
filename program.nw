@@ -1455,7 +1455,7 @@ TEST_SETUP(parse_command_line_args)
 {
     initialize_parameters(&params);
     <<reset [[getopt_long]]>>
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
 }
 @
 
@@ -1467,7 +1467,7 @@ optind = 1;
 #include <getopt.h>
 @
 
-<<reset [[err_msg]]>>=
+<<clear [[err_msg]]>>=
 err_msg[0] = '\0';
 @
 
@@ -1617,6 +1617,7 @@ TEST(parse_command_line_args, double_format)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
@@ -1640,7 +1641,7 @@ TEST(parse_command_line_args, digits_over_100_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1669,7 +1670,7 @@ TEST(parse_command_line_args, digits_under_0_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1806,7 +1807,7 @@ TEST(parse_command_line_args, missing_input_files_give_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1831,7 +1832,7 @@ TEST(parse_command_line_args, non_writable_output_file_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1886,7 +1887,7 @@ TEST(parse_command_line_args, existing_writable_output_file)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
@@ -1909,7 +1910,7 @@ TEST(parse_command_line_args, non_existing_input_files_give_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1935,7 +1936,7 @@ TEST(parse_command_line_args, non_existing_layout_file_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1961,7 +1962,7 @@ TEST(parse_command_line_args, non_existing_data_file_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -1990,11 +1991,12 @@ TEST(parse_command_line_args,
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
 
+    <<clear [[err_msg]]>>
     errno = 0;
     status = stat(output_file, &buf);
 
@@ -2027,7 +2029,7 @@ TEST(parse_command_line_args, empty_output_filename_gives_error)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
-    <<reset [[err_msg]]>>
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
@@ -2161,6 +2163,7 @@ TEST(parse_layout_file, write_and_read_back_layout_file)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
@@ -2218,11 +2221,13 @@ TEST(parse_layout_file, bad_magic_number)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2251,11 +2256,13 @@ TEST(parse_layout_file, bad_bytes_per_double)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2280,11 +2287,13 @@ TEST(parse_layout_file, bad_number_of_covariates)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2401,12 +2410,14 @@ TEST(parse_layout_file, bad_number_of_snps)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
     in.nsnp = -1;  /* should be >0 */
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2435,11 +2446,13 @@ TEST(parse_layout_file, bad_number_of_traits)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     in.ntrait = -1;  /* should be >0 */
     status = validate_layout(&in);
 
@@ -2466,11 +2479,13 @@ TEST(parse_layout_file, bad_number_of_snps_per_tile)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2496,11 +2511,13 @@ TEST(parse_layout_file, bad_number_of_traits_per_tile)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
@@ -2524,11 +2541,13 @@ TEST(parse_layout_file, bad_max_label_length)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     in.max_char = -1;  /* should be >=2 */
     status = validate_layout(&in);
 
@@ -2561,14 +2580,17 @@ TEST(parse_layout_file, set_column_print_order_with_subset_of_columns)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "validate_layout return value");
 
+    <<clear [[err_msg]]>>
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "set_column_print_order return value");
@@ -2605,14 +2627,17 @@ TEST(parse_layout_file, set_permuted_column_print_order)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "validate_layout return value");
 
+    <<clear [[err_msg]]>>
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "set_column_print_order return value");
@@ -2648,14 +2673,17 @@ TEST(parse_layout_file, invalid_user_supplied_column_label)
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "write_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = parse_layout_file(file, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "parse_layout_file return value");
 
+    <<clear [[err_msg]]>>
     status = validate_layout(&in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
         "validate_layout return value");
 
+    <<clear [[err_msg]]>>
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
         "set_column_print_order return value");
