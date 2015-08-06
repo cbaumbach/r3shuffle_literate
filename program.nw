@@ -715,13 +715,13 @@ for (i = 0; i < layout->ntrait; i++, s += layout->max_char)
 int validate_layout(struct Layout *layout)
 {
     <<check that magic number is 6>>
-    <<check that doubles occupy >0 bytes>>
-    <<check that there are $\ge2$ covariates>>
-    <<check that we have >0 snps>>
-    <<check that we have >0 traits>>
-    <<check that we have >0 snps per tile>>
-    <<check that we have >0 traits per tile>>
-    <<check that labels have max length $\ge2$ bytes>>
+    <<check that doubles occupy $>$0 bytes>>
+    <<check that there are $\ge$2 covariates>>
+    <<check that we have $>$0 snps>>
+    <<check that we have $>$0 traits>>
+    <<check that we have $>$0 snps per tile>>
+    <<check that we have $>$0 traits per tile>>
+    <<check that labels have max length $\ge$2 bytes>>
 
     return 1;
 }
@@ -740,7 +740,7 @@ if (layout->magic_number != 6) {
 
 A double must occupy more than 0 bytes.
 
-<<check that doubles occupy >0 bytes>>=
+<<check that doubles occupy $>$0 bytes>>=
 if (layout->bytes_per_double <= 0) {
     SET_ERR_MSG("bad number of bytes per double in layout file: "
         "expected >0, got %d", layout->bytes_per_double);
@@ -750,7 +750,7 @@ if (layout->bytes_per_double <= 0) {
 
 We have at least 2~covariates: the intercept and the snp.
 
-<<check that there are $\ge2$ covariates>>=
+<<check that there are $\ge$2 covariates>>=
 if (layout->nvar < 2) {
     SET_ERR_MSG("bad number of covariates in layout file: "
         "expected >=2, got %d", layout->nvar);
@@ -760,7 +760,7 @@ if (layout->nvar < 2) {
 
 There must be at least one snp and one trait.
 
-<<check that we have >0 snps>>=
+<<check that we have $>$0 snps>>=
 if (layout->nsnp <= 0) {
     SET_ERR_MSG("bad number of snps in layout file: "
         "expected >0, got %d", layout->nsnp);
@@ -768,7 +768,7 @@ if (layout->nsnp <= 0) {
 }
 @
 
-<<check that we have >0 traits>>=
+<<check that we have $>$0 traits>>=
 if (layout->ntrait <= 0) {
     SET_ERR_MSG("bad number of traits in layout file: "
         "expected >0, got %d", layout->ntrait);
@@ -778,7 +778,7 @@ if (layout->ntrait <= 0) {
 
 There must be at least one snp and one trait per tile (see below).
 
-<<check that we have >0 snps per tile>>=
+<<check that we have $>$0 snps per tile>>=
 if (layout->snps_per_tile <= 0) {
     SET_ERR_MSG("bad number of snps per tile in layout file: "
         "expected >0, got %d", layout->snps_per_tile);
@@ -786,7 +786,7 @@ if (layout->snps_per_tile <= 0) {
 }
 @
 
-<<check that we have >0 traits per tile>>=
+<<check that we have $>$0 traits per tile>>=
 if (layout->traits_per_tile <= 0) {
     SET_ERR_MSG("bad number of traits per tile in layout file: "
         "expected >0, got %d", layout->traits_per_tile);
@@ -799,7 +799,7 @@ The smallest possible label consists of a single character.
 Therefore there must be at least two bytes of space for every label,
 one for the label itself and one for the terminating nul byte.
 
-<<check that labels have max length $\ge2$ bytes>>=
+<<check that labels have max length $\ge$2 bytes>>=
 if (layout->max_char < 2) {
     SET_ERR_MSG("bad max label length in layout file: "
         "expected >=2, got %d", layout->max_char);
@@ -823,10 +823,10 @@ int write_layout_file(const char *file, struct Layout *layout)
         return 0;
     }
 
-    <<check that labels have max length $\ge2$ bytes>>
-    <<check that we have >0 snps>>
-    <<check that we have >0 traits>>
-    <<check that there are >0 covariates>>
+    <<check that labels have max length $\ge$2 bytes>>
+    <<check that we have $>$0 snps>>
+    <<check that we have $>$0 traits>>
+    <<check that there are $>$0 covariates>>
 
     a[0] = layout->magic_number;
     a[1] = layout->bytes_per_double;
@@ -861,7 +861,7 @@ int write_layout_file(const char *file, struct Layout *layout)
 #include "err-msg.h"
 @
 
-<<check that there are >0 covariates>>=
+<<check that there are $>$0 covariates>>=
 if (layout->nvar <= 0) {
     SET_ERR_MSG("bad number of covariates in layout file: "
         "expected >0, got %d", layout->nvar);
