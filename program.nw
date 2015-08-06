@@ -1180,7 +1180,8 @@ void index2offset(int snp, int trait, unsigned long *offset,
 Here is the code that maps an offset to a snp index and a trait index.
 
 <<src/parse-data-file.c functions>>=
-void offset2index(unsigned long offset, int *snp, int *trait, struct Layout *layout)
+void offset2index(unsigned long offset, int *snp, int *trait,
+    struct Layout *layout)
 {
     int elts_per_tile_row, elts_per_tile, snps_in_this_tile;
     int tile_row, tile_col, row_within_tile, col_within_tile;
@@ -1592,7 +1593,8 @@ TEST(parse_command_line_args, bad_digits_gives_error)
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "parse status");
-    TEST_ASSERT_EQUAL_STRING("unable to convert --digits to integer: foo", err_msg);
+    TEST_ASSERT_EQUAL_STRING("unable to convert --digits to integer: "
+        "foo", err_msg);
 }
 @
 
@@ -1642,7 +1644,8 @@ TEST(parse_command_line_args, digits_over_100_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("argument to --digits must be <100", err_msg);
+    TEST_ASSERT_EQUAL_STRING("argument to --digits must be <100",
+        err_msg);
 }
 @
 
@@ -1670,7 +1673,8 @@ TEST(parse_command_line_args, digits_under_0_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("argument to --digits must be >=0", err_msg);
+    TEST_ASSERT_EQUAL_STRING("argument to --digits must be >=0",
+        err_msg);
 }
 @
 
@@ -1733,7 +1737,8 @@ Test that forgetting to supply a column label after the [[--column]]
 command-line option causes an error.
 
 <<test/test-parse-command-line-args.c test cases>>=
-TEST(parse_command_line_args, missing_column_label_argument_gives_error)
+TEST(parse_command_line_args,
+    missing_column_label_argument_gives_error)
 {
     char *argv[] = {"ignore", "--column"};
 
@@ -1745,7 +1750,8 @@ TEST(parse_command_line_args, missing_column_label_argument_gives_error)
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, missing_column_label_argument_gives_error);
+RUN_TEST_CASE(parse_command_line_args,
+    missing_column_label_argument_gives_error);
 @
 
 Test that the [[--print-columns]] command-line option is recognized.
@@ -1758,12 +1764,14 @@ TEST(parse_command_line_args, print_columns_is_set)
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, params.print_columns, "print_columns");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, params.print_columns,
+        "print_columns");
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, print_columns_is_set);
+RUN_TEST_CASE(parse_command_line_args,
+    print_columns_is_set);
 @
 
 Test that input files are set correctly.
@@ -1776,8 +1784,10 @@ TEST(parse_command_line_args, input_files_are_set)
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.iout", params.layout_file, "layout file");
-    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.out", params.data_file, "data file");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.iout",
+        params.layout_file, "layout file");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("foo/bar.out",
+        params.data_file, "data file");
 }
 @
 
@@ -1800,12 +1810,14 @@ TEST(parse_command_line_args, missing_input_files_give_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("missing command-line argument: FILE", err_msg);
+    TEST_ASSERT_EQUAL_STRING("missing command-line argument: FILE",
+        err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, missing_input_files_give_error);
+RUN_TEST_CASE(parse_command_line_args,
+    missing_input_files_give_error);
 @
 
 Test that a non-writable output file results in an error.
@@ -1823,12 +1835,14 @@ TEST(parse_command_line_args, non_writable_output_file_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("can't write to output file: fake/file", err_msg);
+    TEST_ASSERT_EQUAL_STRING("can't write to output file: fake/file",
+        err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, non_writable_output_file_gives_error);
+RUN_TEST_CASE(parse_command_line_args,
+    non_writable_output_file_gives_error);
 @
 
 Test that the output file, if not specified, defaults to [[stdout]].
@@ -1842,15 +1856,18 @@ TEST(parse_command_line_args, output_file_defaults_to_stdout)
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse status");
 
+    <<clear [[err_msg]]>>
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate status");
-    TEST_ASSERT_TRUE_MESSAGE(params.output_file == NULL, "output file defaults to stdout");
+    TEST_ASSERT_TRUE_MESSAGE(params.output_file == NULL,
+        "output file defaults to stdout");
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, output_file_defaults_to_stdout);
+RUN_TEST_CASE(parse_command_line_args,
+    output_file_defaults_to_stdout);
 @
 
 <<parse command-line args installed includes>>=
@@ -1862,7 +1879,8 @@ Test that an already existing and writable output file is accepted.
 <<test/test-parse-command-line-args.c test cases>>=
 TEST(parse_command_line_args, existing_writable_output_file)
 {
-    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/input"};
+    char *argv[] = {"ignore", "--output", "test/data/output.txt",
+        "test/data/input"};
 
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
@@ -1884,7 +1902,8 @@ Test that a non-existing input file gives an error.
 <<test/test-parse-command-line-args.c test cases>>=
 TEST(parse_command_line_args, non_existing_input_files_give_error)
 {
-    char *argv[] = {"ignore", "--output", "test/data/output.txt", "foo"};
+    char *argv[] = {"ignore", "--output", "test/data/output.txt",
+        "foo"};
 
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
@@ -1894,12 +1913,14 @@ TEST(parse_command_line_args, non_existing_input_files_give_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: foo.iout", err_msg);
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: "
+        "foo.iout", err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, non_existing_input_files_give_error);
+RUN_TEST_CASE(parse_command_line_args,
+    non_existing_input_files_give_error);
 @
 
 Test that a non-existent layout file causes an error.
@@ -1907,7 +1928,8 @@ Test that a non-existent layout file causes an error.
 <<test/test-parse-command-line-args.c test cases>>=
 TEST(parse_command_line_args, non_existing_layout_file_gives_error)
 {
-    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/data_only"};
+    char *argv[] = {"ignore", "--output", "test/data/output.txt",
+        "test/data/data_only"};
 
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
@@ -1917,12 +1939,14 @@ TEST(parse_command_line_args, non_existing_layout_file_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: test/data/data_only.iout", err_msg);
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: "
+        "test/data/data_only.iout", err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, non_existing_layout_file_gives_error);
+RUN_TEST_CASE(parse_command_line_args,
+    non_existing_layout_file_gives_error);
 @
 
 Test that a non-existent data file causes an error.
@@ -1930,7 +1954,8 @@ Test that a non-existent data file causes an error.
 <<test/test-parse-command-line-args.c test cases>>=
 TEST(parse_command_line_args, non_existing_data_file_gives_error)
 {
-    char *argv[] = {"ignore", "--output", "test/data/output.txt", "test/data/layout_only"};
+    char *argv[] = {"ignore", "--output", "test/data/output.txt",
+        "test/data/layout_only"};
 
     status = parse_command_line_args(NELEMS(argv), argv, &params);
 
@@ -1940,19 +1965,22 @@ TEST(parse_command_line_args, non_existing_data_file_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: test/data/layout_only.out", err_msg);
+    TEST_ASSERT_EQUAL_STRING("unable to open file for reading: "
+        "test/data/layout_only.out", err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, non_existing_data_file_gives_error);
+RUN_TEST_CASE(parse_command_line_args,
+    non_existing_data_file_gives_error);
 @
 
 Test that a non-existing but writable output file is gone after having
 been tested for writability.
 
 <<test/test-parse-command-line-args.c test cases>>=
-TEST(parse_command_line_args, non_existing_but_writable_output_file_gone_after_test)
+TEST(parse_command_line_args,
+    non_existing_but_writable_output_file_gone_after_test)
 {
     struct stat buf;
     char *output_file = "test/data/delete_me.txt";
@@ -1976,7 +2004,8 @@ TEST(parse_command_line_args, non_existing_but_writable_output_file_gone_after_t
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, non_existing_but_writable_output_file_gone_after_test);
+RUN_TEST_CASE(parse_command_line_args,
+    non_existing_but_writable_output_file_gone_after_test);
 @
 
 <<test/test-parse-command-line-args.c includes>>=
@@ -2002,12 +2031,14 @@ TEST(parse_command_line_args, empty_output_filename_gives_error)
     status = validate_command_line_args(&params);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate status");
-    TEST_ASSERT_EQUAL_STRING("output filename must not be empty", err_msg);
+    TEST_ASSERT_EQUAL_STRING("output filename must not be empty",
+        err_msg);
 }
 @
 
 <<parse command-line args installed test cases>>=
-RUN_TEST_CASE(parse_command_line_args, empty_output_filename_gives_error);
+RUN_TEST_CASE(parse_command_line_args,
+    empty_output_filename_gives_error);
 @
 
 <<test/test-runners/test-parse-command-line-args-runner.c>>=
@@ -2082,7 +2113,7 @@ out.ntrait           = NELEMS(trait_labels);
 out.snps_per_tile    = 4;
 out.traits_per_tile  = 3;
 out.max_char         = 10;
-out.ncov             = ((NELEMS(beta_labels) - 1) * NELEMS(beta_labels)) / 2;
+out.ncov = ((NELEMS(beta_labels) - 1) * NELEMS(beta_labels)) / 2;
 out.beta_labels      = beta_labels;
 out.se_labels        = se_labels;
 out.cov_labels       = cov_labels;
@@ -2127,41 +2158,48 @@ TEST(parse_layout_file, write_and_read_back_layout_file)
 
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.magic_number,     in.magic_number,     "magic number");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.bytes_per_double, in.bytes_per_double, "bytes per double");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.nvar,             in.nvar,             "nvar");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.nsnp,             in.nsnp,             "nsnp");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.ntrait,           in.ntrait,           "ntrait");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.snps_per_tile,    in.snps_per_tile,    "snps per tile");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.traits_per_tile,  in.traits_per_tile,  "traits per tile");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.max_char,         in.max_char,         "max char");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(out.ncov,             in.ncov,             "ncov");
+    TEST_ASSERT_EQUAL_INT(out.magic_number,     in.magic_number);
+    TEST_ASSERT_EQUAL_INT(out.bytes_per_double, in.bytes_per_double);
+    TEST_ASSERT_EQUAL_INT(out.nvar,             in.nvar);
+    TEST_ASSERT_EQUAL_INT(out.nsnp,             in.nsnp);
+    TEST_ASSERT_EQUAL_INT(out.ntrait,           in.ntrait);
+    TEST_ASSERT_EQUAL_INT(out.snps_per_tile,    in.snps_per_tile);
+    TEST_ASSERT_EQUAL_INT(out.traits_per_tile,  in.traits_per_tile);
+    TEST_ASSERT_EQUAL_INT(out.max_char,         in.max_char);
+    TEST_ASSERT_EQUAL_INT(out.ncov,             in.ncov);
 
     TEST_ASSERT_TRUE(in.beta_labels != NULL);
     for (i = 0; i < out.nvar; i++)
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.beta_labels[i], in.beta_labels[i], "beta labels");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.beta_labels[i],
+            in.beta_labels[i], "beta labels");
 
     TEST_ASSERT_TRUE(in.se_labels != NULL);
     for (i = 0; i < out.nvar; i++)
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.se_labels[i], in.se_labels[i], "se labels");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.se_labels[i],
+            in.se_labels[i], "se labels");
 
     TEST_ASSERT_TRUE(in.cov_labels != NULL);
     for (i = 0; i < ((out.nvar - 1) * out.nvar) / 2; i++)
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.cov_labels[i], in.cov_labels[i], "cov labels");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.cov_labels[i],
+            in.cov_labels[i], "cov labels");
 
     TEST_ASSERT_TRUE(in.snp_labels != NULL);
     for (i = 0; i < out.nsnp; i++)
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.snp_labels[i], in.snp_labels[i], "snp labels");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.snp_labels[i],
+            in.snp_labels[i], "snp labels");
 
     TEST_ASSERT_TRUE(in.trait_labels != NULL);
     for (i = 0; i < out.ntrait; i++)
-        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.trait_labels[i], in.trait_labels[i], "trait labels");
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(out.trait_labels[i],
+            in.trait_labels[i], "trait labels");
 }
 @
 
@@ -2177,16 +2215,20 @@ TEST(parse_layout_file, bad_magic_number)
     out.magic_number = 99;  /* should be 6 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad magic number in layout file: expected 6, got 99", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad magic number in layout file: "
+        "expected 6, got 99", err_msg);
 }
 @
 
@@ -2206,16 +2248,20 @@ TEST(parse_layout_file, bad_bytes_per_double)
     out.bytes_per_double = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of bytes per double in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of bytes per double in "
+        "layout file: expected >0, got -1", err_msg);
 }
 @
 
@@ -2231,16 +2277,20 @@ TEST(parse_layout_file, bad_number_of_covariates)
     out.nvar = 1;  /* should be >=2 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout file: expected >=2, got 1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout "
+        "file: expected >=2, got 1", err_msg);
 }
 @
 
@@ -2252,72 +2302,88 @@ Test that [[write_layout_file]] throws an error upon receiving a
 non-positive number of snps in the layout structure.
 
 <<test/test-parse-layout-file.c test cases>>=
-TEST(parse_layout_file, non_positive_number_of_snps_causes_error_in_write_layout_file)
+TEST(parse_layout_file,
+    non_positive_number_of_snps_causes_error_during_write)
 {
     out.nsnp = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: "
+        "expected >0, got -1", err_msg);
 }
 @
 
 <<parse layout file installed test cases>>=
-RUN_TEST_CASE(parse_layout_file, non_positive_number_of_snps_causes_error_in_write_layout_file);
+RUN_TEST_CASE(parse_layout_file,
+    non_positive_number_of_snps_causes_error_during_write);
 @
 
 Test that [[write_layout_file]] throws an error upon receiving a
 non-positive number of traits in the layout structure.
 
 <<test/test-parse-layout-file.c test cases>>=
-TEST(parse_layout_file, non_positive_number_of_traits_causes_error_in_write_layout_file)
+TEST(parse_layout_file,
+    non_positive_number_of_traits_causes_error_during_write)
 {
     out.ntrait = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: "
+        "expected >0, got -1", err_msg);
 }
 @
 
 <<parse layout file installed test cases>>=
-RUN_TEST_CASE(parse_layout_file, non_positive_number_of_traits_causes_error_in_write_layout_file);
+RUN_TEST_CASE(parse_layout_file,
+    non_positive_number_of_traits_causes_error_during_write);
 @
 
 Test that [[write_layout_file]] throws an error upon receiving a
 non-positive number of covariates in the layout structure.
 
 <<test/test-parse-layout-file.c test cases>>=
-TEST(parse_layout_file, non_positive_number_of_covariates_causes_error_in_write_layout_file)
+TEST(parse_layout_file,
+    non_positive_number_of_covariates_causes_error_during_write)
 {
     out.nvar = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of covariates in layout "
+        "file: expected >0, got -1", err_msg);
 }
 @
 
 <<parse layout file installed test cases>>=
-RUN_TEST_CASE(parse_layout_file, non_positive_number_of_covariates_causes_error_in_write_layout_file);
+RUN_TEST_CASE(parse_layout_file,
+    non_positive_number_of_covariates_causes_error_during_write);
 @
 
 Test that [[write_layout_file]] throws an error upon receiving a
 non-positive number of covariates in the layout structure.
 
 <<test/test-parse-layout-file.c test cases>>=
-TEST(parse_layout_file, max_char_smaller_than_2_causes_error_in_write_layout_file)
+TEST(parse_layout_file,
+    max_char_smaller_than_2_causes_error_during_write)
 {
     out.max_char = -1;  /* should be >=2 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "write_layout_file return value");
-    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: expected >=2, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "write_layout_file return value");
+    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: "
+        "expected >=2, got -1", err_msg);
 }
 @
 
 <<parse layout file installed test cases>>=
-RUN_TEST_CASE(parse_layout_file, max_char_smaller_than_2_causes_error_in_write_layout_file);
+RUN_TEST_CASE(parse_layout_file,
+    max_char_smaller_than_2_causes_error_during_write);
 @
 
 Test that a non-positive number of snps in the layout file causes an
@@ -2332,17 +2398,21 @@ TEST(parse_layout_file, bad_number_of_snps)
 {
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     in.nsnp = -1;  /* should be >0 */
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps in layout file: "
+        "expected >0, got -1", err_msg);
 }
 @
 
@@ -2362,17 +2432,21 @@ TEST(parse_layout_file, bad_number_of_traits)
 {
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     in.ntrait = -1;  /* should be >0 */
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits in layout file: "
+        "expected >0, got -1", err_msg);
 }
 @
 
@@ -2389,16 +2463,20 @@ TEST(parse_layout_file, bad_number_of_snps_per_tile)
     out.snps_per_tile = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of snps per tile in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of snps per tile in layout "
+        "file: expected >0, got -1", err_msg);
 }
 @
 
@@ -2415,16 +2493,20 @@ TEST(parse_layout_file, bad_number_of_traits_per_tile)
     out.traits_per_tile = -1;  /* should be >0 */
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad number of traits per tile in layout file: expected >0, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad number of traits per tile in "
+        "layout file: expected >0, got -1", err_msg);
 }
 @
 
@@ -2439,17 +2521,21 @@ TEST(parse_layout_file, bad_max_label_length)
 {
     status = write_layout_file(file, &out);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     in.max_char = -1;  /* should be >=2 */
     status = validate_layout(&in);
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "validate_layout return value");
-    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: expected >=2, got -1", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "validate_layout return value");
+    TEST_ASSERT_EQUAL_STRING("bad max label length in layout file: "
+        "expected >=2, got -1", err_msg);
 }
 @
 
@@ -2463,8 +2549,8 @@ to the respective columns in the layout file.
 <<test/test-parse-layout-file.c test cases>>=
 TEST(parse_layout_file, set_column_print_order_with_subset_of_columns)
 {
-    /* column label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
-    /* column index: 0     1     2     3   4   5   6      7      8      */
+    /* label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
+    /* index: 0     1     2     3   4   5   6      7      8      */
 
     char *columns[] = {"se2", "cov0_2", "beta1"};
     int correct_ucp2acp[] = {5, 7, 1, -9};
@@ -2472,26 +2558,31 @@ TEST(parse_layout_file, set_column_print_order_with_subset_of_columns)
     int ncolumn = NELEMS(columns);
 
     status = write_layout_file(file, &out);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "validate_layout return value");
 
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "set_column_print_order return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "set_column_print_order return value");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[0], ucp2acp[0], "se2");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[1], ucp2acp[1], "cov0_2");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[2], ucp2acp[2], "beta1");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(correct_ucp2acp[3], ucp2acp[3], "-9");
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[0], ucp2acp[0]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[1], ucp2acp[1]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[2], ucp2acp[2]);
+    TEST_ASSERT_EQUAL_INT(correct_ucp2acp[3], ucp2acp[3]);
 }
 @
 
 <<parse layout file installed test cases>>=
-RUN_TEST_CASE(parse_layout_file, set_column_print_order_with_subset_of_columns);
+RUN_TEST_CASE(parse_layout_file,
+    set_column_print_order_with_subset_of_columns);
 @
 
 Test that we are able to map user-supplied column labels that form a
@@ -2501,25 +2592,30 @@ actual labels in the layout file.
 <<test/test-parse-layout-file.c test cases>>=
 TEST(parse_layout_file, set_permuted_column_print_order)
 {
-    /* column label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
-    /* column index: 0     1     2     3   4   5   6      7      8      */
+    /* label: beta0 beta1 beta2 se0 se1 se2 cov0_1 cov0_2 cov1_2 */
+    /* index: 0     1     2     3   4   5   6      7      8      */
 
-    char *columns[] = {"cov1_2", "beta2", "se1", "cov0_1", "se0", "beta0", "se2", "cov0_2", "beta1"};
+    char *columns[] = {"cov1_2", "beta2", "se1", "cov0_1", "se0",
+        "beta0", "se2", "cov0_2", "beta1"};
     int correct_ucp2acp[] = {8, 2, 4, 6, 3, 0, 5, 7, 1, -9};
     int ucp2acp[] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -9};
     int ncolumn = NELEMS(columns);
 
     status = write_layout_file(file, &out);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "validate_layout return value");
 
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "set_column_print_order return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "set_column_print_order return value");
 
     TEST_ASSERT_EQUAL_INT(correct_ucp2acp[0], ucp2acp[0]);
     TEST_ASSERT_EQUAL_INT(correct_ucp2acp[1], ucp2acp[1]);
@@ -2549,17 +2645,22 @@ TEST(parse_layout_file, invalid_user_supplied_column_label)
     int ncolumn = NELEMS(columns);
 
     status = write_layout_file(file, &out);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "write_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "write_layout_file return value");
 
     status = parse_layout_file(file, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "parse_layout_file return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "parse_layout_file return value");
 
     status = validate_layout(&in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status, "validate_layout return value");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, status,
+        "validate_layout return value");
 
     status = set_column_print_order(columns, ncolumn, ucp2acp, &in);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status, "set_column_print_order return value");
-    TEST_ASSERT_EQUAL_STRING("user-specified column doesn't exist: foobar", err_msg);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, status,
+        "set_column_print_order return value");
+    TEST_ASSERT_EQUAL_STRING("user-specified column doesn't exist: "
+        "foobar", err_msg);
 }
 @
 
@@ -2696,7 +2797,8 @@ TEST(parse_data_file, offset2index)
     for (i = 0; i < n; i++) {
         offset2index(i, &snp, &trait, &layout);
         TEST_ASSERT_EQUAL_INT_MESSAGE(snp_index[i], snp, "snp index");
-        TEST_ASSERT_EQUAL_INT_MESSAGE(trait_index[i], trait, "trait index");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(trait_index[i], trait,
+            "trait index");
     }
 }
 @
@@ -2716,7 +2818,8 @@ TEST(parse_data_file, index2offset)
     for (snp = 0; snp < layout.nsnp; snp++) {
         for (trait = 0; trait < layout.ntrait; trait++) {
             index2offset(snp, trait, &offset, &layout);
-            TEST_ASSERT_EQUAL_INT_MESSAGE(offsets[snp][trait], offset, "offset");
+            TEST_ASSERT_EQUAL_INT_MESSAGE(offsets[snp][trait],
+                offset, "offset");
         }
     }
 }
@@ -2764,7 +2867,8 @@ int main(int argc, const char *argv[])
 # directory or set explicitly using the below make variable.
 # UNITY_HOME = path/to/unity
 CFLAGS = -Wall -Wextra -g
-UNITY_INCLUDES = -I$(UNITY_HOME)/src -I$(UNITY_HOME)/extras/fixture/src
+UNITY_INCLUDES = -I$(UNITY_HOME)/src \
+                 -I$(UNITY_HOME)/extras/fixture/src
 
 UNITY_SOURCES = $(UNITY_HOME)/src/unity.c \
                 $(UNITY_HOME)/extras/fixture/src/unity_fixture.c
@@ -2826,7 +2930,7 @@ test/test-runners/test-parse-command-line-args-runner.o: \
 test/test-runners/test-parse-command-line-args-runner.c: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== test-parse-layout-file-runner ===========================
+# ==== test-parse-layout-file-runner =================================
 
 test/test-runners/test-parse-layout-file-runner.o: \
         test/test-runners/test-parse-layout-file-runner.c
@@ -2835,7 +2939,7 @@ test/test-runners/test-parse-layout-file-runner.o: \
 test/test-runners/test-parse-layout-file-runner.c: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== test-parse-data-file-runner ===========================
+# ==== test-parse-data-file-runner ===================================
 
 test/test-runners/test-parse-data-file-runner.o: \
         test/test-runners/test-parse-data-file-runner.c
@@ -2852,7 +2956,7 @@ test/test-parse-command-line-args.o: test/test-parse-command-line-args.c
 test/test-parse-command-line-args.c: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== test-parse-layout-file ==================================
+# ==== test-parse-layout-file ========================================
 
 test/test-parse-layout-file.o: test/test-parse-layout-file.c
 	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
@@ -2860,7 +2964,7 @@ test/test-parse-layout-file.o: test/test-parse-layout-file.c
 test/test-parse-layout-file.c: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== test-parse-data-file ==================================
+# ==== test-parse-data-file ==========================================
 
 test/test-parse-data-file.o: test/test-parse-data-file.c
 	gcc $(CFLAGS) $(UNITY_INCLUDES) -Isrc -c -o $@ $<
@@ -2881,7 +2985,7 @@ src/parse-command-line-args.c: program.nw
 src/parse-command-line-args.h: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== parse-layout-file =======================================
+# ==== parse-layout-file =============================================
 
 src/parse-layout-file.o: src/parse-layout-file.c \
                          src/parse-layout-file.h \
@@ -2894,7 +2998,7 @@ src/parse-layout-file.c: program.nw
 src/parse-layout-file.h: program.nw
 	notangle -R$@ -t4 -L $< > $@
 
-# ==== parse-data-file =======================================
+# ==== parse-data-file ===============================================
 
 src/parse-data-file.o: src/parse-data-file.c \
                          src/parse-data-file.h \
