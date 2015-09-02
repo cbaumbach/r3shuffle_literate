@@ -321,8 +321,8 @@ if (optind < argc) {
     assert(nchar - 1 == (size_t)sprintf(s, "%s%s", argv[optind], data_extension));
     params->data_file = s;
 
-    nchar = len + sizeof layout_extension;
-    assert((s = (char *)malloc(nchar + 1)) != NULL);
+    nchar = len + sizeof layout_extension;  /* includes NUL byte */
+    assert((s = (char *)malloc(nchar)) != NULL);
     assert(nchar - 1 == (size_t)sprintf(s, "%s%s", argv[optind], layout_extension));
     params->layout_file = s;
 }
